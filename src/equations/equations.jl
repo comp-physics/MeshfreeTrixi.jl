@@ -43,5 +43,3 @@
 # abstract type AbstractPolytropicEulerEquations{NDIMS, NVARS} <:
 #                 AbstractEquations{NDIMS, NVARS} end
 # include("polytropic_euler_2d.jl")
-
-
