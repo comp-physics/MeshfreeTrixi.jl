@@ -50,8 +50,8 @@ using MuladdMacro: @muladd
 using Octavian: Octavian, matmul!
 using Polyester: Polyester, @batch # You know, the cheapest threads you can find...
 using OffsetArrays: OffsetArray, OffsetVector
-using P4est
-using T8code
+# using P4est
+# using T8code
 using Setfield: @set
 using RecipesBase: RecipesBase
 using Requires: @require
@@ -68,6 +68,25 @@ using TriplotRecipes: DGTriPseudocolor
 @reexport using SimpleUnPack: @unpack
 using SimpleUnPack: @pack!
 using DataStructures: BinaryHeap, FasterForward, extract_all!
+
+# RBFD.jl dependencies
+import DynamicPolynomials: @polyvar
+import DynamicPolynomials: monomials
+import DynamicPolynomials: differentiate
+# using DynamicPolynomials: @polyvar, monomials, differentiate
+# using FixedPolynomials
+using StaticPolynomials
+using LinearAlgebra
+using StaticArrays
+# using HNSW
+using SparseArrays
+using DelimitedFiles
+using HDF5
+using Statistics
+using WriteVTK
+using Symbolics
+using RuntimeGeneratedFunctions
+using NearestNeighbors
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
