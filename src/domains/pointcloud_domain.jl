@@ -57,4 +57,17 @@ end
 
 # Additional Parser Methods Below. 
 
+# MeshData comes from StartUpDG.MeshData. Boundary's are a dictionary of boundary names and
+# come from StartUpDG.tag_boundary_faces.
+# Furthermore, this mesh type is generic. The constructor is called by the solver using 
+# another call that has the appropriate solver::type. 
+
+# The way our domain data will be instantiated is as follows.
+# Generate solver with polydeg and specific basis.
+#    solver = PointCloudSolver{polydeg = 3, approximation_type = PHS_w_Monomials()}
+# Generate mesh where solver is an input. This calls the mesh constructor in solver file.
+#    mesh = PointCloudMesh(filename, solver)
+# This allows us to calculate the NearestNeighbors connectivity and store it in the domain.
+# This is because we will already know the dimensionality and polydeg. 
+
 end # @muladd

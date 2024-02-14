@@ -1,6 +1,7 @@
 # Base data structure is PointCloudDomain
 # Constructors are for different ways to create a PointCloudDomain
 # Examples include MedusaPointCloud for a point cloud from a Medusa file
+# Based on TreeMesh. Currently not used.
 #
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
