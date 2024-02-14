@@ -1,7 +1,3 @@
-# Base data structure is PointCloudDomain
-# Constructors are for different ways to create a PointCloudDomain
-# Examples include MedusaPointCloud for a point cloud from a Medusa file
-#
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -9,236 +5,56 @@
 @muladd begin
 #! format: noindent
 
-# include("abstract_tree.jl")
-# include("serial_tree.jl")
-# include("parallel_tree.jl")
-
-get_name(mesh::AbstractMesh) = mesh |> typeof |> nameof |> string
-
-# Composite type to hold the actual tree in addition to other mesh-related data
-# that is not strictly part of the tree.
-# The mesh is really just about the connectivity, size, and location of the individual
-# tree nodes. Neighbor information between interfaces or the large sides for mortars is
-# something that is solver-specific and that might not be needed by all solvers (or in a
-# different form). Also, these data values can be performance critical, so a mesh would
-# have to store them for all solvers in an efficient way - OTOH, different solvers might
-# use different cells of a shared mesh, so "efficient" is again solver dependent.
 """
-    PointCloudDomain{NDIMS} <: AbstractMesh{NDIMS}
+    PointCloudDomain{NDIMS, ...}
 
-A Cartesian mesh based on trees of hypercubes to support adaptive mesh refinement.
+`PointCloudDomain` describes a domain type which wraps `StartUpDG.MeshData` and `boundary_faces` in a
+dispatchable type. This is intended to store geometric data and connectivities for any type of
+mesh (Cartesian, affine, curved, structured/unstructured).
 """
-mutable struct PointCloudDomain{NDIMS} <: AbstractMesh{NDIMS}
-    # point_type::PointType
-    current_filename::String
-    unsaved_changes::Bool
-    first_cell_by_rank::OffsetVector{Int, Vector{Int}}
-    n_cells_by_rank::OffsetVector{Int, Vector{Int}}
-
-    function PointCloudDomain{NDIMS}(n_cells_max::Integer) where {NDIMS}
-        # Create mesh
-        m = new()
-        # m.tree = TreeType(n_cells_max)
-        m.current_filename = ""
-        m.unsaved_changes = true
-        m.first_cell_by_rank = OffsetVector(Int[], 0)
-        m.n_cells_by_rank = OffsetVector(Int[], 0)
-
-        return m
-    end
-
-    # TODO: Taal refactor, order of important arguments, use of n_cells_max?
-    # TODO: Taal refactor, allow other RealT for the mesh, not just Float64
-    # TODO: Taal refactor, use NTuple instead of domain_center::AbstractArray{Float64}
-    function PointCloudDomain{NDIMS}(n_cells_max::Integer,
-                                     domain_center::AbstractArray{Float64},
-                                     domain_length,
-                                     periodicity = true) where {NDIMS}
-        @assert NDIMS isa Integer && NDIMS > 0
-
-        # Create mesh
-        m = new()
-        # m.tree = TreeType(n_cells_max, domain_center, domain_length, periodicity)
-        m.current_filename = ""
-        m.unsaved_changes = true
-        m.first_cell_by_rank = OffsetVector(Int[], 0)
-        m.n_cells_by_rank = OffsetVector(Int[], 0)
-
-        return m
-    end
+### Basing Medusa style PointCloudDomain on DGMultiMesh
+# Planning to have generic PointCloudDomain but a specific constructor 
+# for Medusa input files. Eventually could call Medusa directly.
+struct PointCloudDomain{NDIMS, MeshType, MeshDataT <: MeshData{NDIMS}, BoundaryFaceT}
+    md::MeshDataT
+    boundary_faces::BoundaryFaceT
 end
 
-const PointCloudDomain1D = PointCloudDomain{1}
-const PointCloudDomain2D = PointCloudDomain{2}
-const PointCloudDomain3D = PointCloudDomain{3}
-
-const SerialPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:SerialTree{NDIMS}}
-const ParallelPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:ParallelTree{NDIMS}}
-
-@inline mpi_parallel(mesh::SerialPointCloudDomain) = False()
-@inline mpi_parallel(mesh::ParallelPointCloudDomain) = True()
-
-partition!(mesh::SerialPointCloudDomain) = nothing
-
-# Constructor for passing the dimension and mesh type as an argument
-# function PointCloudDomain(::Type{TreeType},
-#                           args...) where {NDIMS, TreeType <: AbstractTree{NDIMS}}
-#     PointCloudDomain{NDIMS, TreeType}(args...)
-# end
-
-# Constructor accepting a single number as center (as opposed to an array) for 1D
-function PointCloudDomain{1}(n::Int, center::Real, len::Real,
-                             periodicity = true)
-    # TODO: Taal refactor, allow other RealT for the mesh, not just Float64
-    return PointCloudDomain{1}(n, SVector{1, Float64}(center), len,
-                               periodicity)
+# enable use of @set and setproperties(...) for PointCloudDomain
+function ConstructionBase.constructorof(::Type{PointCloudDomain{T1, T2, T3, T4}}) where {
+                                                                                         T1,
+                                                                                         T2,
+                                                                                         T3,
+                                                                                         T4
+                                                                                         }
+    PointCloudDomain{T1, T2, T3, T4}
 end
 
-function PointCloudDomain{NDIMS}(n_cells_max::Integer,
-                                 domain_center::NTuple{NDIMS, Real},
-                                 domain_length::Real,
-                                 periodicity = true) where {NDIMS}
-    # TODO: Taal refactor, allow other RealT for the mesh, not just Float64
-    PointCloudDomain{NDIMS}(n_cells_max,
-                            SVector{NDIMS, Float64}(domain_center),
-                            convert(Float64, domain_length), periodicity)
-end
-
-function PointCloudDomain(coordinates_min::NTuple{NDIMS, Real},
-                          coordinates_max::NTuple{NDIMS, Real};
-                          n_cells_max,
-                          periodicity = true,
-                          initial_refinement_level,
-                          refinement_patches = (),
-                          coarsening_patches = ()) where {NDIMS}
-    # check arguments
-    if !(n_cells_max isa Integer && n_cells_max > 0)
-        throw(ArgumentError("`n_cells_max` must be a positive integer (provided `n_cells_max = $n_cells_max`)"))
-    end
-    if !(initial_refinement_level isa Integer && initial_refinement_level >= 0)
-        throw(ArgumentError("`initial_refinement_level` must be a non-negative integer (provided `initial_refinement_level = $initial_refinement_level`)"))
-    end
-
-    # Domain length is calculated as the maximum length in any axis direction
-    domain_center = @. (coordinates_min + coordinates_max) / 2
-    domain_length = maximum(coordinates_max .- coordinates_min)
-
-    # TODO: MPI, create nice interface for a parallel tree/mesh
-    # if mpi_isparallel()
-    #     if mpi_isroot() && NDIMS != 2
-    #         println(stderr,
-    #                 "ERROR: The PointCloudDomain supports parallel execution with MPI only in 2 dimensions")
-    #         MPI.Abort(mpi_comm(), 1)
-    #     end
-    #     TreeType = ParallelTree{NDIMS}
-    # else
-    #     TreeType = SerialTree{NDIMS}
-    # end
-
-    # Create mesh
-    mesh = @trixi_timeit timer() "creation" PointCloudDomain{NDIMS}(n_cells_max,
-                                                                    domain_center,
-                                                                    domain_length,
-                                                                    periodicity)
-
-    # Initialize mesh
-    initialize!(mesh, initial_refinement_level, refinement_patches, coarsening_patches)
-
-    return mesh
-end
-
-function initialize!(mesh::PointCloudDomain, initial_refinement_level,
-                     refinement_patches, coarsening_patches)
-    # Create initial refinement
-    @trixi_timeit timer() "initial refinement" refine_uniformly!(mesh.tree,
-                                                                 initial_refinement_level)
-
-    # Apply refinement patches
-    @trixi_timeit timer() "refinement patches" for patch in refinement_patches
-        # TODO: Taal refactor, use multiple dispatch?
-        if patch.type == "box"
-            refine_box!(mesh.tree, patch.coordinates_min, patch.coordinates_max)
-        elseif patch.type == "sphere"
-            refine_sphere!(mesh.tree, patch.center, patch.radius)
-        else
-            error("unknown refinement patch type '$(patch.type)'")
-        end
-    end
-
-    # Apply coarsening patches
-    @trixi_timeit timer() "coarsening patches" for patch in coarsening_patches
-        # TODO: Taal refactor, use multiple dispatch
-        if patch.type == "box"
-            coarsen_box!(mesh.tree, patch.coordinates_min, patch.coordinates_max)
-        else
-            error("unknown coarsening patch type '$(patch.type)'")
-        end
-    end
-
-    # Partition the mesh among multiple MPI ranks (does nothing if run in serial)
-    partition!(mesh)
-
-    return nothing
-end
-
-function PointCloudDomain(coordinates_min::Real, coordinates_max::Real; kwargs...)
-    PointCloudDomain((coordinates_min,), (coordinates_max,); kwargs...)
-end
+Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
 
 function Base.show(io::IO,
-                   mesh::PointCloudDomain{NDIMS}) where {NDIMS}
-    print(io, "PointCloudDomain{", NDIMS, "} with length ",
-          mesh.tree.length)
+                   mesh::PointCloudDomain{NDIMS, MeshType}) where {NDIMS, MeshType}
+    @nospecialize mesh # reduce precompilation time
+    print(io, "$MeshType PointCloudDomain with NDIMS = $NDIMS.")
 end
 
 function Base.show(io::IO, ::MIME"text/plain",
-                   mesh::PointCloudDomain{NDIMS}) where {NDIMS}
+                   mesh::PointCloudDomain{NDIMS, MeshType}) where {NDIMS, MeshType}
+    @nospecialize mesh # reduce precompilation time
     if get(io, :compact, false)
         show(io, mesh)
     else
-        setup = [
-            "center" => mesh.tree.center_level_0,
-            "length" => mesh.tree.length_level_0,
-            "periodicity" => mesh.tree.periodicity,
-            "current #cells" => mesh.tree.length,
-            "#leaf-cells" => count_leaf_cells(mesh.tree),
-            "maximum #cells" => mesh.tree.capacity,
-        ]
-        summary_box(io,
-                    "PointCloudDomain{" * string(NDIMS) * "}",
-                    setup)
+        summary_header(io, "PointCloudDomain{$NDIMS, $MeshType}, ")
+        summary_line(io, "number of elements", mesh.md.num_elements)
+        summary_line(io, "number of boundaries", length(mesh.boundary_faces))
+        for (boundary_name, faces) in mesh.boundary_faces
+            summary_line(increment_indent(io), "nfaces on $boundary_name",
+                         length(faces))
+        end
+        summary_footer(io)
     end
 end
 
-@inline Base.ndims(mesh::PointCloudDomain) = ndims(mesh.tree)
+# Additional Parser Methods Below. 
 
-# Obtain the mesh filename from a restart file
-function get_restart_mesh_filename(restart_filename, mpi_parallel::False)
-    # Get directory name
-    dirname, _ = splitdir(restart_filename)
-
-    # Read mesh filename from restart file
-    mesh_file = ""
-    h5open(restart_filename, "r") do file
-        mesh_file = read(attributes(file)["mesh_file"])
-    end
-
-    # Construct and return filename
-    return joinpath(dirname, mesh_file)
-end
-
-function total_volume(mesh::PointCloudDomain)
-    return mesh.tree.length_level_0^ndims(mesh)
-end
-
-# include("parallel_tree_mesh.jl")
 end # @muladd
-
-# Create PointCloudDomain from Medusa file
-function MedusaPointCloud(filename::String)
-    # Read Medusa file
-    mesh = read_medusa_file(filename)
-
-    # Create PointCloudDomain
-    return PointCloudDomain(mesh)
-end
