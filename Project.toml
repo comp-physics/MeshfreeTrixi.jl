@@ -58,6 +58,7 @@ StrideArrays = "0.1"
 Symbolics = "5"
 SciMLBase = "2"
 Trixi = "0.6"
+WriteVTK = "1"
 julia = "1"
 
 [extras]
