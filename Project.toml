@@ -37,6 +37,7 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 [compat]
 HDF5 = "0.17"
 JuliaFormatter = "1"
+OffsetArrays = "1"
 MPI = "0.20"
 MuladdMacro = "0.2"
 LoopVectorization = "0.12"
