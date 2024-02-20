@@ -97,6 +97,7 @@ include("basic_types.jl")
 
 # Include all top-level source files
 include("auxiliary/auxiliary.jl")
+include("auxiliary/geometry_primatives.jl")
 # include("auxiliary/mpi.jl")
 # include("auxiliary/p4est.jl")
 include("equations/equations.jl")

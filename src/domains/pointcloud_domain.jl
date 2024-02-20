@@ -69,5 +69,7 @@ end
 #    mesh = PointCloudMesh(filename, solver)
 # This allows us to calculate the NearestNeighbors connectivity and store it in the domain.
 # This is because we will already know the dimensionality and polydeg. 
+# Within mesh constructor in PointCloudSolver FILE we will also use part of the basis 
+# information in order to pull in element type and dimensionality. 
 
 end # @muladd
