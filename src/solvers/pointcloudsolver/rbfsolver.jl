@@ -351,12 +351,12 @@ end
 # do nothing for periodic (default) boundary conditions
 # change signature to include du, u in order 
 # to implement Dirichlet BCs
-function calc_boundary_flux!(du, u, cache, t,
-                             boundary_conditions::BoundaryConditionPeriodic,
-                             domain, have_nonconservative_terms, equations,
-                             solver::PointCloudSolver)
-    nothing
-end
+# function calc_boundary_flux!(du, u, cache, t,
+#                              boundary_conditions::BoundaryConditionPeriodic,
+#                              domain, have_nonconservative_terms, equations,
+#                              solver::PointCloudSolver)
+#     nothing
+# end
 
 function calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
                              have_nonconservative_terms, equations,

@@ -28,6 +28,7 @@ using Trixi: @trixi_timeit, timer
 using Trixi: summary_header, summary_line, summary_footer, increment_indent, summary_box
 using Trixi: True, False, nvariables
 
+# Trixi Dependencies
 # # MPI needs to be imported before HDF5 to be able to use parallel HDF5
 # # as long as HDF5.jl uses Requires.jl to enable parallel HDF5 with MPI
 # using MPI: MPI
@@ -92,14 +93,13 @@ using Statistics
 using RecursiveArrayTools: recursivecopy!
 using SciMLBase
 using OrdinaryDiffEq
-using TimerOutputs
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
 # Placing them here allows us to make use of them for dispatch even for
 # other stuff defined very early in our include pipeline, e.g.
 #     IndicatorLöhner(semi::AbstractSemidiscretization)
-# include("basic_types.jl")
+include("basic_types.jl")
 
 # Include all top-level source files
 include("auxiliary/auxiliary.jl")
@@ -107,7 +107,6 @@ include("auxiliary/auxiliary.jl")
 # include("auxiliary/mpi.jl")
 # include("auxiliary/p4est.jl")
 # include("equations/equations.jl")
-# include("meshes/meshes.jl")
 include("domains/domains.jl")
 include("solvers/solvers.jl")
 # include("equations/equations_parabolic.jl") # these depend on parabolic solver types
@@ -126,138 +125,31 @@ include("sources/generic_sources.jl")
 # export types/functions that define the public API of Trixi.jl
 
 # Export Hyperbolic Equations
-# export AcousticPerturbationEquations2D,
-#        CompressibleEulerEquations1D, CompressibleEulerEquations2D,
-#        CompressibleEulerEquations3D
-
-# Export Parabolic Equations
-# export LaplaceDiffusion1D, LaplaceDiffusion2D, LaplaceDiffusion3D,
-#        CompressibleNavierStokesDiffusion1D, CompressibleNavierStokesDiffusion2D,
-#        CompressibleNavierStokesDiffusion3D
-
-# export GradientVariablesConservative, GradientVariablesPrimitive, GradientVariablesEntropy
 
 # Export Flux Functions
-# export flux, flux_central, flux_lax_friedrichs, flux_hll, flux_hllc, flux_hlle,
-#        flux_godunov,
-#        flux_chandrashekar, flux_ranocha, flux_derigs_etal, flux_hindenlang_gassner,
-#        flux_nonconservative_powell, flux_nonconservative_powell_local_symmetric,
-#        flux_kennedy_gruber, flux_shima_etal, flux_ec,
-#        flux_fjordholm_etal, flux_nonconservative_fjordholm_etal,
-#        flux_wintermeyer_etal, flux_nonconservative_wintermeyer_etal,
-#        flux_es_ersing_etal, flux_nonconservative_ersing_etal,
-#        flux_chan_etal, flux_nonconservative_chan_etal, flux_winters_etal,
-#        hydrostatic_reconstruction_audusse_etal, flux_nonconservative_audusse_etal,
-# # TODO: TrixiShallowWater: move anything with "chen_noelle" to new file
-#        hydrostatic_reconstruction_chen_noelle, flux_nonconservative_chen_noelle,
-#        flux_hll_chen_noelle,
-#        FluxPlusDissipation, DissipationGlobalLaxFriedrichs, DissipationLocalLaxFriedrichs,
-#        FluxLaxFriedrichs, max_abs_speed_naive,
-#        FluxHLL, min_max_speed_naive, min_max_speed_davis, min_max_speed_einfeldt,
-#        min_max_speed_chen_noelle,
-#        FluxLMARS,
-#        FluxRotated,
-#        flux_shima_etal_turbo, flux_ranocha_turbo,
-#        FluxHydrostaticReconstruction,
-#        FluxUpwind
 
-# Export Flux Splitting
-# export splitting_steger_warming, splitting_vanleer_haenel,
-#        splitting_coirier_vanleer, splitting_lax_friedrichs
+# Export Initial Conditions
 
-# export initial_condition_constant,
-#        initial_condition_gauss,
-#        initial_condition_density_wave,
-#        initial_condition_weak_blast_wave
-
-# export boundary_condition_do_nothing,
-#        boundary_condition_periodic,
-#        BoundaryConditionDirichlet,
-#        BoundaryConditionNeumann,
-#        boundary_condition_noslip_wall,
-#        boundary_condition_slip_wall,
-#        boundary_condition_wall,
-#        BoundaryConditionNavierStokesWall, NoSlip, Adiabatic, Isothermal,
-#        BoundaryConditionCoupled
-
-# export initial_condition_convergence_test, source_terms_convergence_test
-# export source_terms_harmonic
-# export initial_condition_poisson_nonperiodic, source_terms_poisson_nonperiodic,
-#        boundary_condition_poisson_nonperiodic
-# export initial_condition_eoc_test_coupled_euler_gravity,
-#        source_terms_eoc_test_coupled_euler_gravity, source_terms_eoc_test_euler
-
-# export cons2cons, cons2prim, prim2cons, cons2macroscopic, cons2state, cons2mean,
-#        cons2entropy, entropy2cons
-# export density, pressure, density_pressure, velocity, global_mean_vars,
-#        equilibrium_distribution, waterheight_pressure
-# export entropy, energy_total, energy_kinetic, energy_internal, energy_magnetic,
-#        cross_helicity,
-#        enstrophy
-# export lake_at_rest_error
-# export ncomponents, eachcomponent
+# Export Boundary Conditions
 
 # Export Mesh/Domain Types
-export TreeMesh, StructuredMesh, UnstructuredMesh2D, P4estMesh, T8codeMesh
+export PointCloudDomain
 
 # Export Solvers and Methods
-export DG,
-       DGSEM, LobattoLegendreBasis,
-       FDSBP,
-       VolumeIntegralWeakForm, VolumeIntegralStrongForm,
-       VolumeIntegralFluxDifferencing,
-       VolumeIntegralPureLGLFiniteVolume,
-       VolumeIntegralShockCapturingHG, IndicatorHennemannGassner,
-# TODO: TrixiShallowWater: move new indicator
-       IndicatorHennemannGassnerShallowWater,
-       VolumeIntegralUpwind,
-       SurfaceIntegralWeakForm, SurfaceIntegralStrongForm,
-       SurfaceIntegralUpwind,
-       MortarL2
+# Engines replace VolumeIntegral
+export PointCloudSolver,
+       RBFFDEngine
 
-export VolumeIntegralSubcellLimiting, BoundsCheckCallback,
-       SubcellLimiterIDP, SubcellLimiterIDPCorrection
+# export nelements, nnodes, nvariables,
+#        eachelement, eachnode, eachvariable
 
-export nelements, nnodes, nvariables,
-       eachelement, eachnode, eachvariable
+# Export Basis Details
+export PointCloudBasis, PolyharmonicSpline, RBF
 
-# export SemidiscretizationHyperbolic, semidiscretize, compute_coefficients, integrate
+export HistoryCallback
 
-# export SemidiscretizationHyperbolicParabolic
-
-# export SemidiscretizationEulerAcoustics
-
-# export SemidiscretizationEulerGravity, ParametersEulerGravity,
-#        timestep_gravity_erk52_3Sstar!, timestep_gravity_carpenter_kennedy_erk54_2N!
-
-# export SemidiscretizationCoupled
-
-export SummaryCallback, SteadyStateCallback, AnalysisCallback, AliveCallback,
-       SaveRestartCallback, SaveSolutionCallback, TimeSeriesCallback, VisualizationCallback,
-       AveragingCallback,
-       AMRCallback, StepsizeCallback,
-       GlmSpeedCallback, LBMCollisionCallback, EulerAcousticsCouplingCallback,
-       TrivialCallback, AnalysisCallbackCoupled
-
-export load_mesh, load_time, load_timestep, load_timestep!, load_dt,
-       load_adaptive_time_integrator!
-
-# export ControllerThreeLevel, ControllerThreeLevelCombined,
-#        IndicatorLöhner, IndicatorLoehner, IndicatorMax
-
-# # TODO: TrixiShallowWater: move new limiter
-# export PositivityPreservingLimiterZhangShu, PositivityPreservingLimiterShallowWater
-
-export trixi_include, examples_dir, get_examples, default_example,
-       default_example_unstructured, ode_default_options
-
-export ode_norm, ode_unstable_check
-
-export convergence_test, jacobian_fd, jacobian_ad_forward, linear_structure
-
-export DGMulti, DGMultiBasis, estimate_dt, DGMultiMesh, GaussSBP
-
-export ViscousFormulationBassiRebay1, ViscousFormulationLocalDG
+export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
+       SourceResidualViscosityTominec
 
 # Visualization-related exports
 # export PlotData1D, PlotData2D, ScalarPlotData2D, getmesh, adapt_to_mesh_level!,
