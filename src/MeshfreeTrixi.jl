@@ -106,15 +106,14 @@ include("auxiliary/auxiliary.jl")
 # include("auxiliary/geometry_primatives.jl")
 # include("auxiliary/mpi.jl")
 # include("auxiliary/p4est.jl")
-# include("equations/equations.jl")
+# include("equations/equations.jl") 
 include("domains/domains.jl")
 include("solvers/solvers.jl")
 # include("equations/equations_parabolic.jl") # these depend on parabolic solver types
 # include("semidiscretization/semidiscretization.jl")
+include("sources/generic_sources.jl")
 include("callbacks_step/callbacks_step.jl")
 # include("callbacks_stage/callbacks_stage.jl")
-
-include("sources/generic_sources.jl")
 
 # `trixi_include` and special elixirs such as `convergence_test`
 # include("auxiliary/special_elixirs.jl")
@@ -144,7 +143,8 @@ export PointCloudSolver,
 #        eachelement, eachnode, eachvariable
 
 # Export Basis Details
-export PointCloudBasis, PolyharmonicSpline, RBF
+export Point1D, Point2D, Point3D,
+       PointCloudBasis, PolyharmonicSpline, RBF
 
 export HistoryCallback
 

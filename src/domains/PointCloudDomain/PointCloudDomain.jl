@@ -1,8 +1,8 @@
-using Revise
-using StaticArrays
-using Trixi: summary_header, summary_line, summary_footer, increment_indent
+# using Revise
+# using StaticArrays
+# using Trixi: summary_header, summary_line, summary_footer, increment_indent
 
-includet("geometry_primatives.jl")
+# includet("geometry_primatives.jl")
 
 # Similar to StartUpDG.MeshData
 # This is the underlying data structure for PointCloudDomain
