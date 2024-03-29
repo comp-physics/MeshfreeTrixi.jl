@@ -31,4 +31,5 @@
 # * `LBMCollisionCallback` must come after computing time step size because it is already part of
 #    the next time step calculation
 include("history.jl")
+include("info.jl")
 end # @muladd

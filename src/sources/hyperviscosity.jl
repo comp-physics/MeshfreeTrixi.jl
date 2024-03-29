@@ -15,7 +15,7 @@ struct SourceHyperviscosityFlyer{Cache}
     cache::Cache
 
     function SourceHyperviscosityFlyer{Cache}(cache::Cache) where {
-                                                                   Cache}
+        Cache}
         new(cache)
     end
 end
@@ -25,14 +25,14 @@ end
 
 Construct a hyperviscosity source for an RBF-FD discretization.
 """
-function SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
+function SourceHyperviscosityFlyer(solver, equations, domain; k=2, c=1.0)
     cache = (; create_flyer_hv_cache(solver, equations, domain, k, c)...)
 
     SourceHyperviscosityFlyer{typeof(cache)}(cache)
 end
 
 function create_flyer_hv_cache(solver::PointCloudSolver, equations,
-                               domain::PointCloudDomain, k::Int, c::Real)
+    domain::PointCloudDomain, k::Int, c::Real)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -50,17 +50,17 @@ function create_flyer_hv_cache(solver::PointCloudSolver, equations,
 end
 
 function (source::SourceHyperviscosityFlyer)(du, u, t, domain, equations,
-                                             solver::PointCloudSolver, semi_cache)
+    solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
-    @unpack hv_differentiation_matrix, gamma = cache
+    @unpack hv_differentiation_matrix, gamma = source.cache
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded = semi_cache
 
     # Compute the hyperviscous dissipation
     # flux_values = local_values_threaded[1] # operator directly on u and du
     apply_to_each_field(mul_by_accum!(hv_differentiation_matrix,
-                                      gamma),
-                        du, u)
+            gamma),
+        du, u)
 end
 
 """
@@ -81,7 +81,7 @@ struct SourceHyperviscosityTominec{Cache}
     cache::Cache
 
     function SourceHyperviscosityTominec{Cache}(cache::Cache) where {
-                                                                     Cache}
+        Cache}
         new(cache)
     end
 end
@@ -92,14 +92,14 @@ end
 Construct a hyperviscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
+function SourceHyperviscosityTominec(solver, equations, domain; c=1.0)
     cache = (; create_tominec_hv_cache(solver, equations, domain, c)...)
 
     SourceHyperviscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_hv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real)
+    domain::PointCloudDomain, c::Real)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -119,18 +119,18 @@ function create_tominec_hv_cache(solver::PointCloudSolver, equations,
 end
 
 function (source::SourceHyperviscosityTominec)(du, u, t, domain, equations,
-                                               solver::PointCloudSolver, semi_cache)
+    solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
-    hv_differentiation_matrix = cache.hv_differentiation_matrix
-    gamma = cache.gamma
+    hv_differentiation_matrix = source.cache.hv_differentiation_matrix
+    gamma = source.cache.gamma
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded = semi_cache
 
     # Compute the hyperviscous dissipation
     # flux_values = local_values_threaded[1] # operator directly on u and du
     apply_to_each_field(mul_by_accum!(hv_differentiation_matrix,
-                                      gamma),
-                        du, u)
+            gamma),
+        du, u)
 end
 
 """
@@ -159,14 +159,14 @@ SourceResidualViscosityTominec(solver, equations, domain)
 Construct a targeted Residual Viscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0, polydeg = 4)
+function SourceResidualViscosityTominec(solver, equations, domain; c=1.0, polydeg=4)
     cache = (; create_tominec_rv_cache(solver, equations, domain, c, polydeg)...)
 
     SourceResidualViscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_rv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real, polydeg::Int)
+    domain::PointCloudDomain, c::Real, polydeg::Int)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -200,16 +200,17 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     time_history = zeros(uEltype, polydeg + 1)
     time_weights = zeros(uEltype, polydeg + 1)
     sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
-                                        solver)
+        solver)
 
-    return (; eps_uw, eps_rv, eps, c, residual, approx_du, time_history, time_weights,
-            sol_history)
+    return (; eps_uw, eps_rv, eps, eps_c, c, residual, approx_du, time_history, time_weights,
+        sol_history)
 end
 
 function update_upwind_visc!(eps_uw, u,
-                             equations::CompressibleEulerEquations2D, domain, cache)
+    equations::CompressibleEulerEquations2D, domain, cache)
     gamma = equations.gamma
-    set_to_zero!(eps_uw)
+    # set_to_zero!(eps_uw)
+    eps_uw .= 0.0
 
     for idx in eachindex(eps_uw)
         # Convert from conservative to primitive variables
@@ -217,7 +218,7 @@ function update_upwind_visc!(eps_uw, u,
 
         # Compute local speed (magnitude of velocity) and sound speed
         speed = sqrt(v1^2 + v2^2)
-        sound_speed = sqrt(gamma * p / rho)
+        sound_speed = NaNMath.sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -229,9 +230,9 @@ function update_upwind_visc!(eps_uw, u,
     end
 end
 
-function update_residual_visc!(eps_rv, u,
-                               equations::CompressibleEulerEquations2D, domain, cache,
-                               semi_cache)
+function update_residual_visc!(eps_rv, du, u,
+    equations::CompressibleEulerEquations2D, domain, cache,
+    semi_cache)
     @unpack residual, approx_du, c = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
     local_u = local_values_threaded[1]
@@ -240,7 +241,8 @@ function update_residual_visc!(eps_rv, u,
     set_to_zero!(local_rhs)
 
     gamma = equations.gamma
-    set_to_zero!(eps_rv)
+    # set_to_zero!(eps_rv)
+    eps_rv .= 0.0
 
     @. residual = approx_du - du
     StructArrays.foreachfield(col -> col .= abs.(col), residual)
@@ -284,15 +286,15 @@ function update_visc!(eps, eps_c, eps_uw, eps_rv)
 end
 
 function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
-                                                  solver::PointCloudSolver, semi_cache)
+    solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
-    @unpack eps_uw, eps_rv, eps, eps_c, residual, approx_du = cache
+    @unpack eps_uw, eps_rv, eps, eps_c, residual, approx_du = source.cache
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
 
     # Update eps
-    update_upwind_visc!(eps_uw, u, equations, domain, cache)
-    update_residual_visc!(eps_rv, u, equations, domain, cache, semi_cache)
+    update_upwind_visc!(eps_uw, u, equations, domain, source.cache)
+    update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache)
     update_visc!(eps, eps_c, eps_uw, eps_rv)
 
     # Compute the hyperviscous dissipation
@@ -304,10 +306,10 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
     set_to_zero!(local_rhs)
     for j in eachdim(domain)
         apply_to_each_field(mul_by!(rbf_differentiation_matrices[j]),
-                            local_u, u)
-        apply_to_each_field((out, x) -> out .= x .* eps, local_u)
+            local_u, u)
+        apply_to_each_field((out, x) -> out .= x .* eps, local_u, local_u)
         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', 1),
-                            local_rhs, local_u)
+            local_rhs, local_u)
     end
     du .+= local_rhs
 end

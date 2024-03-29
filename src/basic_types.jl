@@ -6,6 +6,11 @@
 @muladd begin
 #! format: noindent
 
+# abstract supertype of specific semidiscretizations such as
+# - SemidiscretizationHyperbolic for hyperbolic conservation laws
+# - SemidiscretizationEulerGravity for Euler with self-gravity
+abstract type AbstractSemidiscretization end
+
 """
     AbstractDomain{NDIMS}
 

@@ -25,8 +25,10 @@ using Reexport: @reexport
 
 using Trixi: @threaded
 using Trixi: @trixi_timeit, timer
-using Trixi: summary_header, summary_line, summary_footer, increment_indent, summary_box
-using Trixi: True, False, nvariables
+# using Trixi: summary_header, summary_line, summary_footer, increment_indent, summary_box
+using Trixi: True, False, nvariables, have_nonconservative_terms, One
+
+import Trixi: rhs!
 
 # Trixi Dependencies
 # # MPI needs to be imported before HDF5 to be able to use parallel HDF5
@@ -53,7 +55,6 @@ using Trixi: True, False, nvariables
 # using LoopVectorization: LoopVectorization, @turbo, indices
 # using StaticArrayInterface: static_length # used by LoopVectorization
 # using MuladdMacro: @muladd
-# using Octavian: Octavian, matmul!
 # using Polyester: Polyester, @batch # You know, the cheapest threads you can find...
 # using OffsetArrays: OffsetArray, OffsetVector
 # # using P4est
@@ -76,6 +77,13 @@ using Trixi: True, False, nvariables
 # using DataStructures: BinaryHeap, FasterForward, extract_all!
 
 # RBFD.jl dependencies
+using SciMLBase: CallbackSet, DiscreteCallback,
+                 ODEProblem, ODESolution, ODEFunction,
+                 SplitODEProblem
+import SciMLBase: get_du, get_tmp_cache, u_modified!,
+                  AbstractODEIntegrator, init, step!, check_error,
+                  get_proposed_dt, set_proposed_dt!,
+                  terminate!, remake, add_tstop!, has_tstop, first_tstop
 using DelimitedFiles
 import DynamicPolynomials: @polyvar
 import DynamicPolynomials: monomials
@@ -91,8 +99,14 @@ using SparseArrays
 using StructArrays
 using Statistics
 using RecursiveArrayTools: recursivecopy!
-using SciMLBase
 using OrdinaryDiffEq
+using Octavian: Octavian, matmul!
+using Polyester
+using TimerOutputs: TimerOutputs, @notimeit, TimerOutput, print_timer, reset_timer!
+@reexport using SimpleUnPack: @unpack
+using SimpleUnPack: @pack!
+using NaNMath
+using Printf: @printf, @sprintf
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
@@ -136,17 +150,20 @@ export PointCloudDomain
 
 # Export Solvers and Methods
 # Engines replace VolumeIntegral
-export PointCloudSolver,
+export PointCloudSolver, RBFSolver,
        RBFFDEngine
+
+# Internal Methods for Solvers
+export concrete_rbf_flux_basis, concrete_poly_flux_basis, compute_flux_operator
 
 # export nelements, nnodes, nvariables,
 #        eachelement, eachnode, eachvariable
 
 # Export Basis Details
-export Point1D, Point2D, Point3D,
+export RefPointData, Point1D, Point2D, Point3D,
        PointCloudBasis, PolyharmonicSpline, RBF
 
-export HistoryCallback
+export HistoryCallback, InfoCallback
 
 export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
        SourceResidualViscosityTominec
