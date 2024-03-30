@@ -39,6 +39,7 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 DelimitedFiles = "1"
+DiffEqCallbacks = "2"
 DynamicPolynomials = "0.5"
 HDF5 = "0.17"
 JuliaFormatter = "1"
@@ -61,7 +62,7 @@ StrideArrays = "0.1"
 StructArrays = "0.6"
 Symbolics = "5"
 TimerOutputs = "0.5"
-Trixi = "0.6"
+Trixi = "0.6, 0.7"
 WriteVTK = "1"
 julia = "1"
 
