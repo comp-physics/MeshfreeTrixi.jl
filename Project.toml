@@ -39,7 +39,7 @@ WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
 DelimitedFiles = "1"
-DiffEqCallbacks = "2"
+DiffEqCallbacks = "2, 3"
 DynamicPolynomials = "0.5"
 HDF5 = "0.17"
 JuliaFormatter = "1"
