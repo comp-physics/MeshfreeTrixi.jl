@@ -1,9 +1,13 @@
-using Test
+# using Test
 using MeshfreeTrixi
-# using SafeTestsets
+using SafeTestsets
 
-@testset "First Order Operator Test" begin
+@safetestset "First Order Operator Test" begin
     include("first_order_test.jl")
+end
+
+@safetestset "Hyperviscosity Operator Test" begin
+    include("hyperviscosity_test.jl")
 end
 
 # # Original Poisson Test
