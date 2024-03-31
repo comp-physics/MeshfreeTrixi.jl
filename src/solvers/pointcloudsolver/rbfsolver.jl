@@ -233,7 +233,7 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     # evaluate the initial condition at quadrature points
     # @threaded for i in eachelement(domain, solver, cache)
     for i in eachelement(domain, solver, cache)
-        u_values[i] = initial_condition(SVector(i),
+        u_values[i] = initial_condition(pd.points[i],
             t, equations)
     end
 

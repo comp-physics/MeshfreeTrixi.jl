@@ -206,6 +206,11 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS},
                             boundary_tags)
 end
 
+# No checks for these meshes yet available
+function Trixi.check_periodicity_mesh_boundary_conditions(mesh::PointCloudDomain,
+                                                          boundary_conditions)
+end
+
 # """
 #     PointCloudDomain(solver::PointCloudSolver{2, Tri}, triangulateIO, boundary_dict::Dict{Symbol, Int})
 
