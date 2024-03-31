@@ -201,9 +201,10 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     time_weights = zeros(uEltype, polydeg + 1)
     sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
         solver)
+    success_iter = [0]
 
     return (; eps_uw, eps_rv, eps, eps_c, c, residual, approx_du, time_history, time_weights,
-        sol_history)
+        sol_history, success_iter)
 end
 
 function update_upwind_visc!(eps_uw, u,
@@ -218,7 +219,8 @@ function update_upwind_visc!(eps_uw, u,
 
         # Compute local speed (magnitude of velocity) and sound speed
         speed = sqrt(v1^2 + v2^2)
-        sound_speed = NaNMath.sqrt(gamma * p / rho)
+        # sound_speed = NaNMath.sqrt(gamma * p / rho)
+        sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -271,9 +273,9 @@ function update_residual_visc!(eps_rv, du, u,
     end
 end
 
-function update_visc!(eps, eps_c, eps_uw, eps_rv)
+function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter)
     for i in eachindex(eps)
-        if isnan(eps_rv[i]) || isinf(eps_rv[i])
+        if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
             eps[i] = eps_uw[i]
             eps_c[i] = 1.0
         else
@@ -295,7 +297,7 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
     # Update eps
     update_upwind_visc!(eps_uw, u, equations, domain, source.cache)
     update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache)
-    update_visc!(eps, eps_c, eps_uw, eps_rv)
+    update_visc!(eps, eps_c, eps_uw, eps_rv, source.cache.success_iter[1])
 
     # Compute the hyperviscous dissipation
     # We need to apply P ⋅ u = Dx' diag(eps) Dx u + Dy' diag(eps) Dy u + ...
