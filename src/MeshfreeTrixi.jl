@@ -121,6 +121,7 @@ include("auxiliary/auxiliary.jl")
 # include("auxiliary/mpi.jl")
 # include("auxiliary/p4est.jl")
 # include("equations/equations.jl") 
+include("equations/PointCloudBCs.jl")
 include("domains/domains.jl")
 include("solvers/solvers.jl")
 # include("equations/equations_parabolic.jl") # these depend on parabolic solver types

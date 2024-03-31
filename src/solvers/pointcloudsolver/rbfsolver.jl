@@ -386,17 +386,20 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
     boundary_normals = domain.boundary_tags[boundary_key].normals
 
     # loop through boundary points
+    # Modified to strongly impose BCs
+    # Requires mutating u and setting du
+    # to 0 at boundary locations
     for i in eachindex(boundary_idxs)
         boundary_idx = boundary_idxs[i]
         boundary_normal = boundary_normals[i]
         boundary_coordinates = pd.points[boundary_idx]
         u_boundary = u[boundary_idx]
-        boundary_flux[i] = boundary_condition(u[boundary_idx],
+        du[i] = boundary_condition(u[boundary_idx],
             boundary_normal, boundary_coordinates,
             t,
-            flux_hll, equations)
+            FluxZero(), equations)
     end
-    @. du += boundary_flux
+    # @. du += boundary_flux
 
     # Hacky way but going to try just accumulating flux directly into du
     # Will likely need to revisit BCs entirely for point cloud solver
@@ -509,6 +512,14 @@ function Trixi.rhs!(du, u, t, domain, equations,
     solver::PointCloudSolver, cache) where {BC,Source}
     @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, solver, cache)
 
+    # Require two passes for strongly imposed BCs
+    # First sets u to BC value, 
+    # second sets du to zero
+    @trixi_timeit timer() "boundary flux" begin
+        calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
+            have_nonconservative_terms(equations), equations, solver)
+    end
+
     @trixi_timeit timer() "calc fluxes" begin
         calc_fluxes!(du, u, domain,
             have_nonconservative_terms(equations), equations,
@@ -525,10 +536,11 @@ function Trixi.rhs!(du, u, t, domain, equations,
     #                          have_nonconservative_terms(equations), equations, solver)
     # end
 
-    @trixi_timeit timer() "boundary flux" begin
-        calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-            have_nonconservative_terms(equations), equations, solver)
-    end
+    # Original BC location
+    # @trixi_timeit timer() "boundary flux" begin
+    #     calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
+    #         have_nonconservative_terms(equations), equations, solver)
+    # end
 
     # @trixi_timeit timer() "surface integral" begin
     #     calc_surface_integral!(du, u, domain, equations, solver.surface_integral,
@@ -540,6 +552,14 @@ function Trixi.rhs!(du, u, t, domain, equations,
 
     @trixi_timeit timer() "source terms" begin
         calc_sources!(du, u, t, source_terms, domain, equations, solver, cache)
+    end
+
+    # Require two passes for strongly imposed BCs
+    # First sets u to BC value, 
+    # second sets du to zero
+    @trixi_timeit timer() "boundary flux" begin
+        calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
+            have_nonconservative_terms(equations), equations, solver)
     end
 
     return nothing

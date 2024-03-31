@@ -163,29 +163,31 @@ struct BoundaryConditionDirichlet{B}
     boundary_value_function::B
 end
 
-# Dirichlet-type boundary condition for use with TreeMesh or StructuredMesh
-@inline function (boundary_condition::BoundaryConditionDirichlet)(u_inner,
-                                                                  orientation_or_normal,
-                                                                  direction,
-                                                                  x, t,
-                                                                  surface_flux_function,
-                                                                  equations)
-    u_boundary = boundary_condition.boundary_value_function(x, t, equations)
+# # Dirichlet-type boundary condition for use with TreeMesh or StructuredMesh
+# @inline function (boundary_condition::BoundaryConditionDirichlet)(u_inner,
+#                                                                   orientation_or_normal,
+#                                                                   direction,
+#                                                                   x, t,
+#                                                                   surface_flux_function,
+#                                                                   equations)
+#     u_boundary = boundary_condition.boundary_value_function(x, t, equations)
 
-    # Calculate boundary flux
-    if iseven(direction) # u_inner is "left" of boundary, u_boundary is "right" of boundary
-        flux = surface_flux_function(u_inner, u_boundary, orientation_or_normal,
-                                     equations)
-    else # u_boundary is "left" of boundary, u_inner is "right" of boundary
-        flux = surface_flux_function(u_boundary, u_inner, orientation_or_normal,
-                                     equations)
-    end
+#     # Calculate boundary flux
+#     if iseven(direction) # u_inner is "left" of boundary, u_boundary is "right" of boundary
+#         flux = surface_flux_function(u_inner, u_boundary, orientation_or_normal,
+#                                      equations)
+#     else # u_boundary is "left" of boundary, u_inner is "right" of boundary
+#         flux = surface_flux_function(u_boundary, u_inner, orientation_or_normal,
+#                                      equations)
+#     end
 
-    return flux
-end
+#     return flux
+# end
 
 # Dirichlet-type boundary condition for use with UnstructuredMesh2D
 # Note: For unstructured we lose the concept of an "absolute direction"
+# Modified for Point Cloud implementation
+# requires strongly imposing boundary conditions
 @inline function (boundary_condition::BoundaryConditionDirichlet)(u_inner,
                                                                   normal_direction::AbstractVector,
                                                                   x, t,
@@ -195,6 +197,7 @@ end
     u_boundary = boundary_condition.boundary_value_function(x, t, equations)
 
     # Calculate boundary flux
+    # Will always return zero vector
     flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
 
     return flux
@@ -376,131 +379,131 @@ of the correct length `nvariables(equations)`.
 """
 function energy_internal end
 
-####################################################################################################
-# Include files with actual implementations for different systems of equations.
+# ####################################################################################################
+# # Include files with actual implementations for different systems of equations.
 
-# Numerical flux formulations that are independent of the specific system of equations
-include("numerical_fluxes.jl")
+# # Numerical flux formulations that are independent of the specific system of equations
+# include("numerical_fluxes.jl")
 
-# Linear scalar advection
-abstract type AbstractLinearScalarAdvectionEquation{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("linear_scalar_advection_1d.jl")
-include("linear_scalar_advection_2d.jl")
-include("linear_scalar_advection_3d.jl")
+# # Linear scalar advection
+# abstract type AbstractLinearScalarAdvectionEquation{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("linear_scalar_advection_1d.jl")
+# include("linear_scalar_advection_2d.jl")
+# include("linear_scalar_advection_3d.jl")
 
-# Inviscid Burgers
-abstract type AbstractInviscidBurgersEquation{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("inviscid_burgers_1d.jl")
+# # Inviscid Burgers
+# abstract type AbstractInviscidBurgersEquation{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("inviscid_burgers_1d.jl")
 
-# Shallow water equations
-abstract type AbstractShallowWaterEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("shallow_water_1d.jl")
-include("shallow_water_2d.jl")
-include("shallow_water_two_layer_1d.jl")
-include("shallow_water_two_layer_2d.jl")
-include("shallow_water_quasi_1d.jl")
+# # Shallow water equations
+# abstract type AbstractShallowWaterEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("shallow_water_1d.jl")
+# include("shallow_water_2d.jl")
+# include("shallow_water_two_layer_1d.jl")
+# include("shallow_water_two_layer_2d.jl")
+# include("shallow_water_quasi_1d.jl")
 
-# CompressibleEulerEquations
-abstract type AbstractCompressibleEulerEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("compressible_euler_1d.jl")
-include("compressible_euler_2d.jl")
-include("compressible_euler_3d.jl")
-include("compressible_euler_quasi_1d.jl")
+# # CompressibleEulerEquations
+# abstract type AbstractCompressibleEulerEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("compressible_euler_1d.jl")
+# include("compressible_euler_2d.jl")
+# include("compressible_euler_3d.jl")
+# include("compressible_euler_quasi_1d.jl")
 
-# CompressibleEulerMulticomponentEquations
-abstract type AbstractCompressibleEulerMulticomponentEquations{NDIMS, NVARS, NCOMP} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("compressible_euler_multicomponent_1d.jl")
-include("compressible_euler_multicomponent_2d.jl")
+# # CompressibleEulerMulticomponentEquations
+# abstract type AbstractCompressibleEulerMulticomponentEquations{NDIMS, NVARS, NCOMP} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("compressible_euler_multicomponent_1d.jl")
+# include("compressible_euler_multicomponent_2d.jl")
 
-# PolytropicEulerEquations
-abstract type AbstractPolytropicEulerEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("polytropic_euler_2d.jl")
+# # PolytropicEulerEquations
+# abstract type AbstractPolytropicEulerEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("polytropic_euler_2d.jl")
 
-# Retrieve number of components from equation instance for the multicomponent case
-@inline function ncomponents(::AbstractCompressibleEulerMulticomponentEquations{NDIMS,
-                                                                                NVARS,
-                                                                                NCOMP}) where {
-                                                                                               NDIMS,
-                                                                                               NVARS,
-                                                                                               NCOMP
-                                                                                               }
-    NCOMP
-end
-"""
-    eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
+# # Retrieve number of components from equation instance for the multicomponent case
+# @inline function ncomponents(::AbstractCompressibleEulerMulticomponentEquations{NDIMS,
+#                                                                                 NVARS,
+#                                                                                 NCOMP}) where {
+#                                                                                                NDIMS,
+#                                                                                                NVARS,
+#                                                                                                NCOMP
+#                                                                                                }
+#     NCOMP
+# end
+# """
+#     eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the components in `AbstractCompressibleEulerMulticomponentEquations`.
-In particular, not the components themselves are returned.
-"""
-@inline function eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
-    Base.OneTo(ncomponents(equations))
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the components in `AbstractCompressibleEulerMulticomponentEquations`.
+# In particular, not the components themselves are returned.
+# """
+# @inline function eachcomponent(equations::AbstractCompressibleEulerMulticomponentEquations)
+#     Base.OneTo(ncomponents(equations))
+# end
 
-# Ideal MHD
-abstract type AbstractIdealGlmMhdEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("ideal_glm_mhd_1d.jl")
-include("ideal_glm_mhd_2d.jl")
-include("ideal_glm_mhd_3d.jl")
+# # Ideal MHD
+# abstract type AbstractIdealGlmMhdEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("ideal_glm_mhd_1d.jl")
+# include("ideal_glm_mhd_2d.jl")
+# include("ideal_glm_mhd_3d.jl")
 
-# IdealGlmMhdMulticomponentEquations
-abstract type AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS, NCOMP} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("ideal_glm_mhd_multicomponent_1d.jl")
-include("ideal_glm_mhd_multicomponent_2d.jl")
+# # IdealGlmMhdMulticomponentEquations
+# abstract type AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS, NCOMP} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("ideal_glm_mhd_multicomponent_1d.jl")
+# include("ideal_glm_mhd_multicomponent_2d.jl")
 
-# Retrieve number of components from equation instance for the multicomponent case
-@inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
-                                                                          NCOMP}) where {
-                                                                                         NDIMS,
-                                                                                         NVARS,
-                                                                                         NCOMP
-                                                                                         }
-    NCOMP
-end
-"""
-    eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
+# # Retrieve number of components from equation instance for the multicomponent case
+# @inline function ncomponents(::AbstractIdealGlmMhdMulticomponentEquations{NDIMS, NVARS,
+#                                                                           NCOMP}) where {
+#                                                                                          NDIMS,
+#                                                                                          NVARS,
+#                                                                                          NCOMP
+#                                                                                          }
+#     NCOMP
+# end
+# """
+#     eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the components in `AbstractIdealGlmMhdMulticomponentEquations`.
-In particular, not the components themselves are returned.
-"""
-@inline function eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
-    Base.OneTo(ncomponents(equations))
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the components in `AbstractIdealGlmMhdMulticomponentEquations`.
+# In particular, not the components themselves are returned.
+# """
+# @inline function eachcomponent(equations::AbstractIdealGlmMhdMulticomponentEquations)
+#     Base.OneTo(ncomponents(equations))
+# end
 
-# Diffusion equation: first order hyperbolic system
-abstract type AbstractHyperbolicDiffusionEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("hyperbolic_diffusion_1d.jl")
-include("hyperbolic_diffusion_2d.jl")
-include("hyperbolic_diffusion_3d.jl")
+# # Diffusion equation: first order hyperbolic system
+# abstract type AbstractHyperbolicDiffusionEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("hyperbolic_diffusion_1d.jl")
+# include("hyperbolic_diffusion_2d.jl")
+# include("hyperbolic_diffusion_3d.jl")
 
-# Lattice-Boltzmann equation (advection part only)
-abstract type AbstractLatticeBoltzmannEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("lattice_boltzmann_2d.jl")
-include("lattice_boltzmann_3d.jl")
+# # Lattice-Boltzmann equation (advection part only)
+# abstract type AbstractLatticeBoltzmannEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("lattice_boltzmann_2d.jl")
+# include("lattice_boltzmann_3d.jl")
 
-# Acoustic perturbation equations
-abstract type AbstractAcousticPerturbationEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("acoustic_perturbation_2d.jl")
+# # Acoustic perturbation equations
+# abstract type AbstractAcousticPerturbationEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("acoustic_perturbation_2d.jl")
 
-# Linearized Euler equations
-abstract type AbstractLinearizedEulerEquations{NDIMS, NVARS} <:
-              AbstractEquations{NDIMS, NVARS} end
-include("linearized_euler_2d.jl")
+# # Linearized Euler equations
+# abstract type AbstractLinearizedEulerEquations{NDIMS, NVARS} <:
+#               AbstractEquations{NDIMS, NVARS} end
+# include("linearized_euler_2d.jl")
 
-abstract type AbstractEquationsParabolic{NDIMS, NVARS, GradientVariables} <:
-              AbstractEquations{NDIMS, NVARS} end
+# abstract type AbstractEquationsParabolic{NDIMS, NVARS, GradientVariables} <:
+#               AbstractEquations{NDIMS, NVARS} end
 end # @muladd
 
 ####################################################################################################
