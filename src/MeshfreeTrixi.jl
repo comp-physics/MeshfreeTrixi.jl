@@ -167,6 +167,7 @@ export RefPointData, Point1D, Point2D, Point3D,
 export HistoryCallback, InfoCallback
 
 export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
+       SourceUpwindViscosityTominec,
        SourceResidualViscosityTominec
 
 # Visualization-related exports
