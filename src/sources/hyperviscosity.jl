@@ -59,7 +59,7 @@ function (source::SourceHyperviscosityFlyer)(du, u, t, domain, equations,
     # Compute the hyperviscous dissipation
     # flux_values = local_values_threaded[1] # operator directly on u and du
     apply_to_each_field(mul_by_accum!(hv_differentiation_matrix,
-            gamma),
+            -gamma),
         du, u)
 end
 
@@ -129,7 +129,7 @@ function (source::SourceHyperviscosityTominec)(du, u, t, domain, equations,
     # Compute the hyperviscous dissipation
     # flux_values = local_values_threaded[1] # operator directly on u and du
     apply_to_each_field(mul_by_accum!(hv_differentiation_matrix,
-            gamma),
+            -gamma),
         du, u)
 end
 
@@ -241,6 +241,12 @@ function update_upwind_visc!(eps_uw, u,
         # Compute local speed (magnitude of velocity) and sound speed
         speed = sqrt(v1^2 + v2^2)
         # sound_speed = NaNMath.sqrt(gamma * p / rho)
+        # if p < 0.0
+        #     p = 0.0
+        # end
+        # if rho < 0.0
+        #     rho = 0.0
+        # end
         sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
@@ -333,7 +339,7 @@ function (source::SourceUpwindViscosityTominec)(du, u, t, domain, equations,
         apply_to_each_field(mul_by!(rbf_differentiation_matrices[j]),
             local_u, u)
         apply_to_each_field((out, x) -> out .= x .* eps, local_u, local_u)
-        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', 1),
+        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', -1),
             local_rhs, local_u)
     end
     du .+= local_rhs
@@ -362,7 +368,7 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
         apply_to_each_field(mul_by!(rbf_differentiation_matrices[j]),
             local_u, u)
         apply_to_each_field((out, x) -> out .= x .* eps, local_u, local_u)
-        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', 1),
+        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', -1),
             local_rhs, local_u)
     end
     du .+= local_rhs

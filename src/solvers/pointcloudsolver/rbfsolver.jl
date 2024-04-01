@@ -319,6 +319,9 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     # as e in eachelement(domain, solver, cache)
     # Also need to determine if we should use
     # u directly or u_values
+    #### CRITICAL: Does DG have divergence term in LHS?
+    # In other words, do we need to multiply the final flux term -1
+    # before adding to du?
     flux_values = local_values_threaded[1]
     for i in eachdim(domain)
         for e in eachelement(domain, solver, cache)
@@ -326,7 +329,7 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
         end
         for j in eachdim(domain)
             apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
-                    1),
+                    -1),
                 du, flux_values)
         end
     end
@@ -394,10 +397,14 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
         boundary_normal = boundary_normals[i]
         boundary_coordinates = pd.points[boundary_idx]
         u_boundary = u[boundary_idx]
-        du[i] = boundary_condition(u[boundary_idx],
+        du[boundary_idx], u[boundary_idx] = boundary_condition(u[boundary_idx],
             boundary_normal, boundary_coordinates,
             t,
             FluxZero(), equations)
+        # du[boundary_idx] = boundary_condition(u[boundary_idx],
+        #     boundary_normal, boundary_coordinates,
+        #     t,
+        #     FluxZero(), equations)
     end
     # @. du += boundary_flux
 

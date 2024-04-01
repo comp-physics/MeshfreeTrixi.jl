@@ -145,6 +145,7 @@ include("callbacks_step/callbacks_step.jl")
 # Export Initial Conditions
 
 # Export Boundary Conditions
+export BoundaryConditionDoNothing
 
 # Export Mesh/Domain Types
 export PointCloudDomain

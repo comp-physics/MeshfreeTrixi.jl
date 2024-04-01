@@ -2,7 +2,7 @@
 struct FluxZero end
 
 function (surface_flux::FluxZero)(u_inner, u_boundary, normal_direction, equations)
-  SVector(zeros(length(u_inner))...)
+    SVector(zeros(length(u_inner))...)
 end
 
 """
@@ -32,19 +32,19 @@ julia> BoundaryConditionDirichlet(initial_condition_convergence_test)
 # Modified for Point Cloud implementation
 # requires strongly imposing boundary conditions
 @inline function (boundary_condition::BoundaryConditionDirichlet)(u_inner,
-  normal_direction::AbstractVector,
-  x, t,
-  surface_flux_function::FluxZero,
-  equations)
-  # get the external value of the solution
-  u_boundary = boundary_condition.boundary_value_function(x, t, equations)
-  u_inner = u_boundary
+                                                                  normal_direction::AbstractVector,
+                                                                  x, t,
+                                                                  surface_flux_function::FluxZero,
+                                                                  equations)
+    # get the external value of the solution
+    u_boundary = boundary_condition.boundary_value_function(x, t, equations)
+    u_inner = u_boundary
 
-  # Calculate boundary flux
-  # Will always return zero vector
-  flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
+    # Calculate boundary flux
+    # Will always return zero vector
+    flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
 
-  return flux
+    return flux, u_boundary
 end
 
 """
@@ -70,43 +70,56 @@ Details about the 1D pressure Riemann solution can be found in Section 6.3.3 of 
 Should be used together with [`UnstructuredMesh2D`](@ref).
 """
 @inline function boundary_condition_slip_wall(u_inner, normal_direction::AbstractVector,
-  x, t,
-  surface_flux_function::FluxZero,
-  equations::CompressibleEulerEquations2D)
-  norm_ = norm(normal_direction)
-  # Normalize the vector without using `normalize` since we need to multiply by the `norm_` later
-  normal = normal_direction / norm_
+                                              x, t,
+                                              surface_flux_function::FluxZero,
+                                              equations::CompressibleEulerEquations2D)
+    norm_ = norm(normal_direction)
+    # Normalize the vector without using `normalize` since we need to multiply by the `norm_` later
+    normal = normal_direction / norm_
 
-  # rotate the internal solution state
-  u_local = Trixi.rotate_to_x(u_inner, normal, equations)
-  u_inner = u_local
+    # rotate the internal solution state
+    u_local = Trixi.rotate_to_x(u_inner, normal, equations)
+    u_inner = u_local
 
-  # compute the primitive variables
-  # rho_local, v_normal, v_tangent, p_local = cons2prim(u_local, equations)
+    # compute the primitive variables
+    # rho_local, v_normal, v_tangent, p_local = cons2prim(u_local, equations)
 
-  # # Get the solution of the pressure Riemann problem
-  # # See Section 6.3.3 of
-  # # Eleuterio F. Toro (2009)
-  # # Riemann Solvers and Numerical Methods for Fluid Dynamics: A Practical Introduction
-  # # [DOI: 10.1007/b79761](https://doi.org/10.1007/b79761)
-  # if v_normal <= 0.0
-  #     sound_speed = sqrt(equations.gamma * p_local / rho_local) # local sound speed
-  #     p_star = p_local *
-  #              (1 + 0.5 * (equations.gamma - 1) * v_normal / sound_speed)^(2 *
-  #                                                                          equations.gamma *
-  #                                                                          equations.inv_gamma_minus_one)
-  # else # v_normal > 0.0
-  #     A = 2 / ((equations.gamma + 1) * rho_local)
-  #     B = p_local * (equations.gamma - 1) / (equations.gamma + 1)
-  #     p_star = p_local +
-  #              0.5 * v_normal / A *
-  #              (v_normal + sqrt(v_normal^2 + 4 * A * (p_local + B)))
-  # end
+    # # Get the solution of the pressure Riemann problem
+    # # See Section 6.3.3 of
+    # # Eleuterio F. Toro (2009)
+    # # Riemann Solvers and Numerical Methods for Fluid Dynamics: A Practical Introduction
+    # # [DOI: 10.1007/b79761](https://doi.org/10.1007/b79761)
+    # if v_normal <= 0.0
+    #     sound_speed = sqrt(equations.gamma * p_local / rho_local) # local sound speed
+    #     p_star = p_local *
+    #              (1 + 0.5 * (equations.gamma - 1) * v_normal / sound_speed)^(2 *
+    #                                                                          equations.gamma *
+    #                                                                          equations.inv_gamma_minus_one)
+    # else # v_normal > 0.0
+    #     A = 2 / ((equations.gamma + 1) * rho_local)
+    #     B = p_local * (equations.gamma - 1) / (equations.gamma + 1)
+    #     p_star = p_local +
+    #              0.5 * v_normal / A *
+    #              (v_normal + sqrt(v_normal^2 + 4 * A * (p_local + B)))
+    # end
 
-  # For the slip wall we directly set the flux as the normal velocity is zero
-  # Strongly imposed, hardset du to 0
-  return SVector(zero(eltype(u_inner)),
-    zero(eltype(u_inner)),
-    zero(eltype(u_inner)),
-    zero(eltype(u_inner)))
+    # For the slip wall we directly set the flux as the normal velocity is zero
+    # Strongly imposed, hardset du to 0
+    return SVector(zero(eltype(u_inner)),
+                   zero(eltype(u_inner)),
+                   zero(eltype(u_inner)),
+                   zero(eltype(u_inner))),
+           u_inner
+end
+
+struct BoundaryConditionDoNothing end
+
+@inline function (::BoundaryConditionDoNothing)(u_inner,
+                                                outward_direction::AbstractVector,
+                                                x, t, surface_flux::FluxZero, equations)
+    return SVector(zero(eltype(u_inner)),
+                   zero(eltype(u_inner)),
+                   zero(eltype(u_inner)),
+                   zero(eltype(u_inner))),
+           u_inner
 end
