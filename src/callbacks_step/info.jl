@@ -16,17 +16,17 @@ Create and return a callback that prints a human-readable summary of the simulat
 beginning of a simulation and then resets the timer. When the returned callback is executed
 directly, the current timer values are shown.
 """
-function InfoCallback(reset_threads=true)
+function InfoCallback(reset_threads = true)
     function initialize(cb, u, t, integrator)
         initialize_info_callback(cb, u, t, integrator;
-            reset_threads)
+                                 reset_threads)
     end
     DiscreteCallback(info_callback, info_callback,
-        save_positions=(false, false),
-        initialize=initialize)
+                     save_positions = (false, false),
+                     initialize = initialize)
 end
 
-function Base.show(io::IO, cb::DiscreteCallback{<:Any,<:typeof(info_callback)})
+function Base.show(io::IO, cb::DiscreteCallback{<:Any, <:typeof(info_callback)})
     @nospecialize cb # reduce precompilation time
 
     print(io, "InfoCallback")
@@ -34,15 +34,15 @@ end
 
 # Format a key/value pair for output from the InfoCallback
 function format_key_value_line(key::AbstractString, value::AbstractString, key_width,
-    total_width;
-    indentation_level=0, guide='…', filler='…',
-    prefix="│ ", suffix=" │")
+                               total_width;
+                               indentation_level = 0, guide = '…', filler = '…',
+                               prefix = "│ ", suffix = " │")
     @assert key_width < total_width
     line = prefix
     # Indent the key as requested (or not at all if `indentation_level == 0`)
     indentation = prefix^indentation_level
     reduced_key_width = key_width - length(indentation)
-    squeezed_key = indentation * squeeze(key, reduced_key_width, filler=filler)
+    squeezed_key = indentation * squeeze(key, reduced_key_width, filler = filler)
     line *= squeezed_key
     line *= ": "
     short = key_width - length(squeezed_key)
@@ -52,13 +52,13 @@ function format_key_value_line(key::AbstractString, value::AbstractString, key_w
         line *= guide^(short - 1) * " "
     end
     value_width = total_width - length(prefix) - length(suffix) - key_width - 2
-    squeezed_value = squeeze(value, value_width, filler=filler)
+    squeezed_value = squeeze(value, value_width, filler = filler)
     line *= squeezed_value
     short = value_width - length(squeezed_value)
     line *= " "^short
     line *= suffix
 
-    @assert length(line) == total_width "should not happen: algorithm error!"
+    @assert length(line)==total_width "should not happen: algorithm error!"
 
     return line
 end
@@ -67,8 +67,8 @@ function format_key_value_line(key, value, args...; kwargs...)
 end
 
 # Squeeze a string to fit into a maximum width by deleting characters from the center
-function squeeze(message, max_width; filler::Char='…')
-    @assert max_width >= 3 "squeezing works only for a minimum `max_width` of 3"
+function squeeze(message, max_width; filler::Char = '…')
+    @assert max_width>=3 "squeezing works only for a minimum `max_width` of 3"
 
     length(message) <= max_width && return message
 
@@ -76,17 +76,17 @@ function squeeze(message, max_width; filler::Char='…')
     keep_back = div(max_width, 2) - (isodd(max_width) ? 0 : 1)
     remove_back = length(message) - keep_front
     remove_front = length(message) - keep_back
-    squeezed = (chop(message, head=0, tail=remove_back)
+    squeezed = (chop(message, head = 0, tail = remove_back)
                 * filler *
-                chop(message, head=remove_front, tail=0))
+                chop(message, head = remove_front, tail = 0))
 
-    @assert length(squeezed) == max_width "`$(length(squeezed)) != $max_width` should not happen: algorithm error!"
+    @assert length(squeezed)==max_width "`$(length(squeezed)) != $max_width` should not happen: algorithm error!"
 
     return squeezed
 end
 
 # Print a summary with a box around it with a given heading and a setup of key=>value pairs
-function summary_box(io::IO, heading, setup=[])
+function summary_box(io::IO, heading, setup = [])
     summary_header(io, heading)
     for (key, value) in setup
         summary_line(io, key, value)
@@ -94,11 +94,11 @@ function summary_box(io::IO, heading, setup=[])
     summary_footer(io)
 end
 
-function summary_header(io, heading; total_width=100, indentation_level=0)
+function summary_header(io, heading; total_width = 100, indentation_level = 0)
     total_width = get(io, :total_width, total_width)
     indentation_level = get(io, :indentation_level, indentation_level)
 
-    @assert indentation_level >= 0 "indentation level may not be negative"
+    @assert indentation_level>=0 "indentation level may not be negative"
 
     # If indentation level is greater than zero, we assume the header has already been printed
     indentation_level > 0 && return
@@ -107,11 +107,11 @@ function summary_header(io, heading; total_width=100, indentation_level=0)
     println(io, "┌" * "─"^(total_width - 2) * "┐")
     println(io, "│ " * heading * " "^(total_width - length(heading) - 4) * " │")
     println(io,
-        "│ " * "═"^length(heading) * " "^(total_width - length(heading) - 4) * " │")
+            "│ " * "═"^length(heading) * " "^(total_width - length(heading) - 4) * " │")
 end
 
-function summary_line(io, key, value; key_width=30, total_width=100,
-    indentation_level=0)
+function summary_line(io, key, value; key_width = 30, total_width = 100,
+                      indentation_level = 0)
     # Printing is not performance-critical, so we can use `@nospecialize` to reduce latency
     @nospecialize value # reduce precompilation time
 
@@ -120,12 +120,12 @@ function summary_line(io, key, value; key_width=30, total_width=100,
     indentation_level = get(io, :indentation_level, indentation_level)
 
     s = format_key_value_line(key, value, key_width, total_width,
-        indentation_level=indentation_level)
+                              indentation_level = indentation_level)
 
     println(io, s)
 end
 
-function summary_footer(io; total_width=100, indentation_level=0)
+function summary_footer(io; total_width = 100, indentation_level = 0)
     total_width = get(io, :total_width, 100)
     indentation_level = get(io, :indentation_level, 0)
 
@@ -145,7 +145,7 @@ end
 # Print information about the current simulation setup
 # Note: This is called *after* all initialization is done, but *before* the first time step
 function initialize_info_callback(cb::DiscreteCallback, u, t, integrator;
-    reset_threads=true)
+                                  reset_threads = true)
     # Optionally reset Polyester.jl threads. See
     # https://github.com/trixi-framework/Trixi.jl/issues/1583
     # https://github.com/JuliaSIMD/Polyester.jl/issues/30
@@ -165,10 +165,10 @@ function initialize_info_callback(cb::DiscreteCallback, u, t, integrator;
 
     io = stdout
     io_context = IOContext(io,
-        :compact => false,
-        :key_width => 30,
-        :total_width => 100,
-        :indentation_level => 0)
+                           :compact => false,
+                           :key_width => 30,
+                           :total_width => 100,
+                           :indentation_level => 0)
 
     semi = integrator.p
     Trixi.print_summary_semidiscretization(io_context, semi)
@@ -193,24 +193,24 @@ function initialize_info_callback(cb::DiscreteCallback, u, t, integrator;
     end
 
     # time integration
-    setup = Pair{String,Any}["Start time"=>first(integrator.sol.prob.tspan),
-        "Final time"=>last(integrator.sol.prob.tspan),
-        "time integrator"=>integrator.alg|>typeof|>nameof,
-        "adaptive"=>integrator.opts.adaptive]
+    setup = Pair{String, Any}["Start time" => first(integrator.sol.prob.tspan),
+                              "Final time" => last(integrator.sol.prob.tspan),
+                              "time integrator" => integrator.alg |> typeof |> nameof,
+                              "adaptive" => integrator.opts.adaptive]
     if integrator.opts.adaptive
         push!(setup,
-            "abstol" => integrator.opts.abstol,
-            "reltol" => integrator.opts.reltol,
-            "controller" => integrator.opts.controller)
+              "abstol" => integrator.opts.abstol,
+              "reltol" => integrator.opts.reltol,
+              "controller" => integrator.opts.controller)
     end
     summary_box(io, "Time integration", setup)
     println()
 
     # technical details
-    setup = Pair{String,Any}["#threads"=>Threads.nthreads()]
+    setup = Pair{String, Any}["#threads" => Threads.nthreads()]
     if Trixi.mpi_isparallel()
         push!(setup,
-            "#MPI ranks" => mpi_nranks())
+              "#MPI ranks" => mpi_nranks())
     end
     summary_box(io, "Environment information", setup)
     println()
@@ -232,15 +232,15 @@ end
 #     println(io, "\n")
 # end
 
-function (cb::DiscreteCallback{Condition,Affect!})(io::IO=stdout) where {Condition,
-    Affect!<:
-    typeof(info_callback)
-}
+function (cb::DiscreteCallback{Condition, Affect!})(io::IO = stdout) where {Condition,
+                                                                            Affect! <:
+                                                                            typeof(info_callback)
+                                                                            }
     # mpi_isroot() || return nothing
 
     TimerOutputs.complement!(timer())
-    print_timer(io, timer(), title="Trixi.jl",
-        allocations=true, linechars=:unicode, compact=false)
+    print_timer(io, timer(), title = "MeshfreeTrixi.jl",
+                allocations = true, linechars = :unicode, compact = false)
     println(io)
     return nothing
 end
