@@ -39,6 +39,7 @@ Trixi = "a7f1ee26-1774-49b1-8366-f1abc58fbfcb"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+DelimitedFiles = "1"
 DynamicPolynomials = "0.5"
 MuladdMacro = "0.2"
 NaNMath = "1"
