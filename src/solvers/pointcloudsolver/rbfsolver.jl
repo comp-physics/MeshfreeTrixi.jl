@@ -233,14 +233,14 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     # evaluate the initial condition at quadrature points
     # @threaded for i in eachelement(domain, solver, cache)
     for i in eachelement(domain, solver, cache)
-        u_values[i] = initial_condition(pd.points[i],
+        u[i] = initial_condition(pd.points[i],
             t, equations)
     end
 
     # multiplying by Pq computes the L2 projection
     # Not doing projection for point cloud solver
     # apply_to_each_field(mul_by!(I), u, u_values)
-    recursivecopy!(u, u_values)
+    # recursivecopy!(u, u_values)
 end
 
 # estimates the timestep based on polynomial degree and domain. Does not account for physics (e.g.,
@@ -323,15 +323,23 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     # In other words, do we need to multiply the final flux term -1
     # before adding to du?
     flux_values = local_values_threaded[1]
+    # for i in eachdim(domain)
+    #     for e in eachelement(domain, solver, cache)
+    #         flux_values[e] = flux(u[e], i, equations)
+    #     end
+    #     for j in eachdim(domain)
+    #         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
+    #                 -1),
+    #             du, flux_values)
+    #     end
+    # end
     for i in eachdim(domain)
         for e in eachelement(domain, solver, cache)
-            flux_values[e] = flux(u_values[e], i, equations)
+            flux_values[e] = flux(u[e], i, equations)
         end
-        for j in eachdim(domain)
-            apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
-                    -1),
-                du, flux_values)
-        end
+        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[i],
+                -1),
+            du, flux_values)
     end
     # @threaded for e in eachelement(domain, solver, cache)
     #     flux_values = local_values_threaded[Threads.threadid()]
@@ -397,8 +405,10 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
         boundary_normal = boundary_normals[i]
         boundary_coordinates = pd.points[boundary_idx]
         u_boundary = u[boundary_idx]
-        du[boundary_idx], u[boundary_idx] = boundary_condition(u[boundary_idx],
-            boundary_normal, boundary_coordinates,
+        du[boundary_idx], u[boundary_idx] = boundary_condition(du[boundary_idx],
+            u[boundary_idx],
+            boundary_normal,
+            boundary_coordinates,
             t,
             FluxZero(), equations)
         # du[boundary_idx] = boundary_condition(u[boundary_idx],

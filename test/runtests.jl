@@ -6,6 +6,10 @@ using SafeTestsets
     include("first_order_test.jl")
 end
 
+@safetestset "Divergence Operator Test" begin
+    include("divergence_test.jl")
+end
+
 @safetestset "Hyperviscosity Operator Test" begin
     include("hyperviscosity_test.jl")
 end
