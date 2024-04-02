@@ -64,6 +64,15 @@ end
 struct PointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
     pd::PointDataT
     boundary_tags::BoundaryFaceT
+    unsaved_changes::Bool # Required for SaveSolutionCallback
+end
+
+# Workaround so other calls to PointCloudDomain will still work
+function PointCloudDomain(pd::PointData{NDIMS, Tv, Ti},
+                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {NDIMS,
+                                                                                    Tv, Ti}
+    return PointCloudDomain{NDIMS, PointData{NDIMS, Tv, Ti},
+                            Dict{Symbol, BoundaryData{Ti, Tv}}}(pd, boundary_tags, false)
 end
 
 function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
@@ -76,7 +85,7 @@ function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
                                                                                     }
     pointData = PointData(points, neighbors)  # Create an instance of PointData
     return PointCloudDomain(pointData,
-                            boundary_tags)
+                            boundary_tags, false)
 end
 
 Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS

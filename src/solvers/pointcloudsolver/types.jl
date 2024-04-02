@@ -122,8 +122,7 @@ function PointCloudDomain(solver::PointCloudSolver, pd::PointData{NDIMS},
                                                                                             Float64},
                                                                                     Ti
                                                                                     }
-    return PointCloudDomain{NDIMS, typeof(pd),
-                            typeof(boundary_tags)}(pd, boundary_tags)
+    return PointCloudDomain(pd, boundary_tags)
 end
 
 # # Mesh types used internally for trait dispatch
