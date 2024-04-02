@@ -14,6 +14,10 @@ end
     include("hyperviscosity_test.jl")
 end
 
+@safetestset "Upwind Viscosity Test" begin
+    include("upwind_viscosity_test.jl")
+end
+
 # # Original Poisson Test
 # @safetestset "First Order Operator Test" begin
 #     include("first_order_test.jl")
