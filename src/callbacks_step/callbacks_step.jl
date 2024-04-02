@@ -32,4 +32,5 @@
 #    the next time step calculation
 include("history.jl")
 include("info.jl")
+include("save_solution_vtk.jl")
 end # @muladd

@@ -176,14 +176,14 @@ In particular, not the boundaries themselves are returned.
 """
 @inline eachboundary(solver::RBFSolver, cache) = Base.OneTo(nboundaries(solver, cache))
 
-"""
-    eachmortar(solver::RBFSolver, cache)
+# """
+#     eachmortar(solver::RBFSolver, cache)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the mortars in `cache`.
-In particular, not the mortars themselves are returned.
-"""
-@inline eachmortar(solver::RBFSolver, cache) = Base.OneTo(nmortars(solver, cache))
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the mortars in `cache`.
+# In particular, not the mortars themselves are returned.
+# """
+# @inline eachmortar(solver::RBFSolver, cache) = Base.OneTo(nmortars(solver, cache))
 
 """
     eachmpiinterface(solver::RBFSolver, cache)
@@ -210,70 +210,70 @@ In particular, not the mortars themselves are returned.
 end
 @inline ninterfaces(solver::RBFSolver, cache) = ninterfaces(cache.interfaces)
 @inline nboundaries(solver::RBFSolver, cache) = nboundaries(cache.boundaries)
-@inline nmortars(solver::RBFSolver, cache) = nmortars(cache.mortars)
+# @inline nmortars(solver::RBFSolver, cache) = nmortars(cache.mortars)
 @inline nmpiinterfaces(solver::RBFSolver, cache) = nmpiinterfaces(cache.mpi_interfaces)
 @inline nmpimortars(solver::RBFSolver, cache) = nmpimortars(cache.mpi_mortars)
 
-# The following functions assume an array-of-structs memory layout
-# We would like to experiment with different memory layout choices
-# in the future, see
-# - https://github.com/trixi-framework/Trixi.jl/issues/88
-# - https://github.com/trixi-framework/Trixi.jl/issues/87
-# - https://github.com/trixi-framework/Trixi.jl/issues/86
-@inline function get_node_coords(x, equations, solver::RBFSolver, indices...)
-    SVector(ntuple(@inline(idx->x[idx, indices...]), Val(ndims(equations))))
-end
+# # The following functions assume an array-of-structs memory layout
+# # We would like to experiment with different memory layout choices
+# # in the future, see
+# # - https://github.com/trixi-framework/Trixi.jl/issues/88
+# # - https://github.com/trixi-framework/Trixi.jl/issues/87
+# # - https://github.com/trixi-framework/Trixi.jl/issues/86
+# @inline function get_node_coords(x, equations, solver::RBFSolver, indices...)
+#     SVector(ntuple(@inline(idx->x[idx, indices...]), Val(ndims(equations))))
+# end
 
-@inline function get_node_vars(u, equations, solver::RBFSolver, indices...)
-    # There is a cut-off at `n == 10` inside of the method
-    # `ntuple(f::F, n::Integer) where F` in Base at ntuple.jl:17
-    # in Julia `v1.5`, leading to type instabilities if
-    # more than ten variables are used. That's why we use
-    # `Val(...)` below.
-    # We use `@inline` to make sure that the `getindex` calls are
-    # really inlined, which might be the default choice of the Julia
-    # compiler for standard `Array`s but not necessarily for more
-    # advanced array types such as `PtrArray`s, cf.
-    # https://github.com/JuliaSIMD/VectorizationBase.jl/issues/55
-    SVector(ntuple(@inline(v->u[v, indices...]), Val(nvariables(equations))))
-end
+# @inline function get_node_vars(u, equations, solver::RBFSolver, indices...)
+#     # There is a cut-off at `n == 10` inside of the method
+#     # `ntuple(f::F, n::Integer) where F` in Base at ntuple.jl:17
+#     # in Julia `v1.5`, leading to type instabilities if
+#     # more than ten variables are used. That's why we use
+#     # `Val(...)` below.
+#     # We use `@inline` to make sure that the `getindex` calls are
+#     # really inlined, which might be the default choice of the Julia
+#     # compiler for standard `Array`s but not necessarily for more
+#     # advanced array types such as `PtrArray`s, cf.
+#     # https://github.com/JuliaSIMD/VectorizationBase.jl/issues/55
+#     SVector(ntuple(@inline(v->u[v, indices...]), Val(nvariables(equations))))
+# end
 
-@inline function get_surface_node_vars(u, equations, solver::RBFSolver, indices...)
-    # There is a cut-off at `n == 10` inside of the method
-    # `ntuple(f::F, n::Integer) where F` in Base at ntuple.jl:17
-    # in Julia `v1.5`, leading to type instabilities if
-    # more than ten variables are used. That's why we use
-    # `Val(...)` below.
-    u_ll = SVector(ntuple(@inline(v->u[1, v, indices...]), Val(nvariables(equations))))
-    u_rr = SVector(ntuple(@inline(v->u[2, v, indices...]), Val(nvariables(equations))))
-    return u_ll, u_rr
-end
+# @inline function get_surface_node_vars(u, equations, solver::RBFSolver, indices...)
+#     # There is a cut-off at `n == 10` inside of the method
+#     # `ntuple(f::F, n::Integer) where F` in Base at ntuple.jl:17
+#     # in Julia `v1.5`, leading to type instabilities if
+#     # more than ten variables are used. That's why we use
+#     # `Val(...)` below.
+#     u_ll = SVector(ntuple(@inline(v->u[1, v, indices...]), Val(nvariables(equations))))
+#     u_rr = SVector(ntuple(@inline(v->u[2, v, indices...]), Val(nvariables(equations))))
+#     return u_ll, u_rr
+# end
 
-@inline function set_node_vars!(u, u_node, equations, solver::RBFSolver, indices...)
-    for v in eachvariable(equations)
-        u[v, indices...] = u_node[v]
-    end
-    return nothing
-end
+# @inline function set_node_vars!(u, u_node, equations, solver::RBFSolver, indices...)
+#     for v in eachvariable(equations)
+#         u[v, indices...] = u_node[v]
+#     end
+#     return nothing
+# end
 
-@inline function add_to_node_vars!(u, u_node, equations, solver::RBFSolver, indices...)
-    for v in eachvariable(equations)
-        u[v, indices...] += u_node[v]
-    end
-    return nothing
-end
+# @inline function add_to_node_vars!(u, u_node, equations, solver::RBFSolver, indices...)
+#     for v in eachvariable(equations)
+#         u[v, indices...] += u_node[v]
+#     end
+#     return nothing
+# end
 
-# Use this function instead of `add_to_node_vars` to speed up
-# multiply-and-add-to-node-vars operations
-# See https://github.com/trixi-framework/Trixi.jl/pull/643
-@inline function multiply_add_to_node_vars!(u, factor, u_node, equations,
-                                            solver::RBFSolver,
-                                            indices...)
-    for v in eachvariable(equations)
-        u[v, indices...] = u[v, indices...] + factor * u_node[v]
-    end
-    return nothing
-end
+# # Use this function instead of `add_to_node_vars` to speed up
+# # multiply-and-add-to-node-vars operations
+# # See https://github.com/trixi-framework/Trixi.jl/pull/643
+# @inline function multiply_add_to_node_vars!(u, factor, u_node, equations,
+#                                             solver::RBFSolver,
+#                                             indices...)
+#     for v in eachvariable(equations)
+#         u[v, indices...] = u[v, indices...] + factor * u_node[v]
+#     end
+#     return nothing
+# end
 
 # Used for analyze_solution
 SolutionAnalyzer(solver::RBFSolver; kwargs...) = SolutionAnalyzer(solver.basis;
@@ -292,14 +292,14 @@ AdaptorAMR(domain, solver::RBFSolver) = AdaptorL2(solver.basis)
 # include("fdsbp_tree/fdsbp.jl")
 # include("fdsbp_unstructured/fdsbp.jl")
 
-function allocate_coefficients(domain::AbstractDomain, equations, solver::RBFSolver,
-                               cache)
-    # We must allocate a `Vector` in order to be able to `resize!` it (AMR).
-    # cf. wrap_array
-    zeros(eltype(cache.elements),
-          nvariables(equations) * nnodes(solver)^ndims(domain) *
-          nelements(solver, cache))
-end
+# function allocate_coefficients(domain::AbstractDomain, equations, solver::RBFSolver,
+#                                cache)
+#     # We must allocate a `Vector` in order to be able to `resize!` it (AMR).
+#     # cf. wrap_array
+#     zeros(eltype(cache.elements),
+#           nvariables(equations) * nnodes(solver)^ndims(domain) *
+#           nelements(solver, cache))
+# end
 
 # @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
 #                             solver::RBFSolverSEM, cache)
@@ -375,78 +375,78 @@ end
 #     end
 # end
 
-# General fallback
-@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-                            solver::RBFSolver, cache)
-    wrap_array_native(u_ode, domain, equations, solver, cache)
-end
+# # General fallback
+# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
+#                             solver::RBFSolver, cache)
+#     wrap_array_native(u_ode, domain, equations, solver, cache)
+# end
 
-# Like `wrap_array`, but guarantees to return a plain `Array`, which can be better
-# for interfacing with external C libraries (MPI, HDF5, visualization),
-# writing solution files etc.
-@inline function wrap_array_native(u_ode::AbstractVector, domain::AbstractDomain,
-                                   equations,
-                                   solver::RBFSolver, cache)
-    @boundscheck begin
-        @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(domain) *
-                nelements(solver, cache)
-    end
-    unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-                (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))...,
-                 nelements(solver, cache)))
-end
+# # Like `wrap_array`, but guarantees to return a plain `Array`, which can be better
+# # for interfacing with external C libraries (MPI, HDF5, visualization),
+# # writing solution files etc.
+# @inline function wrap_array_native(u_ode::AbstractVector, domain::AbstractDomain,
+#                                    equations,
+#                                    solver::RBFSolver, cache)
+#     @boundscheck begin
+#         @assert length(u_ode) ==
+#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
+#                 nelements(solver, cache)
+#     end
+#     unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+#                 (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))...,
+#                  nelements(solver, cache)))
+# end
 
-function compute_coefficients!(u, func, t, domain::AbstractDomain{1}, equations,
-                               solver::RBFSolver,
-                               cache)
-    @threaded for element in eachelement(solver, cache)
-        for i in eachnode(solver)
-            x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-                                     i,
-                                     element)
-            # Changing the node positions passed to the initial condition by the minimum
-            # amount possible with the current type of floating point numbers allows setting
-            # discontinuous initial data in a simple way. In particular, a check like `if x < x_jump`
-            # works if the jump location `x_jump` is at the position of an interface.
-            if i == 1
-                x_node = SVector(nextfloat(x_node[1]))
-            elseif i == nnodes(solver)
-                x_node = SVector(prevfloat(x_node[1]))
-            end
-            u_node = func(x_node, t, equations)
-            set_node_vars!(u, u_node, equations, solver, i, element)
-        end
-    end
-end
+# function compute_coefficients!(u, func, t, domain::AbstractDomain{1}, equations,
+#                                solver::RBFSolver,
+#                                cache)
+#     @threaded for element in eachelement(solver, cache)
+#         for i in eachnode(solver)
+#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
+#                                      i,
+#                                      element)
+#             # Changing the node positions passed to the initial condition by the minimum
+#             # amount possible with the current type of floating point numbers allows setting
+#             # discontinuous initial data in a simple way. In particular, a check like `if x < x_jump`
+#             # works if the jump location `x_jump` is at the position of an interface.
+#             if i == 1
+#                 x_node = SVector(nextfloat(x_node[1]))
+#             elseif i == nnodes(solver)
+#                 x_node = SVector(prevfloat(x_node[1]))
+#             end
+#             u_node = func(x_node, t, equations)
+#             set_node_vars!(u, u_node, equations, solver, i, element)
+#         end
+#     end
+# end
 
-function compute_coefficients!(u, func, t, domain::AbstractDomain{2}, equations,
-                               solver::RBFSolver,
-                               cache)
-    @threaded for element in eachelement(solver, cache)
-        for j in eachnode(solver), i in eachnode(solver)
-            x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-                                     i,
-                                     j, element)
-            u_node = func(x_node, t, equations)
-            set_node_vars!(u, u_node, equations, solver, i, j, element)
-        end
-    end
-end
+# function compute_coefficients!(u, func, t, domain::AbstractDomain{2}, equations,
+#                                solver::RBFSolver,
+#                                cache)
+#     @threaded for element in eachelement(solver, cache)
+#         for j in eachnode(solver), i in eachnode(solver)
+#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
+#                                      i,
+#                                      j, element)
+#             u_node = func(x_node, t, equations)
+#             set_node_vars!(u, u_node, equations, solver, i, j, element)
+#         end
+#     end
+# end
 
-function compute_coefficients!(u, func, t, domain::AbstractDomain{3}, equations,
-                               solver::RBFSolver,
-                               cache)
-    @threaded for element in eachelement(solver, cache)
-        for k in eachnode(solver), j in eachnode(solver), i in eachnode(solver)
-            x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-                                     i,
-                                     j, k, element)
-            u_node = func(x_node, t, equations)
-            set_node_vars!(u, u_node, equations, solver, i, j, k, element)
-        end
-    end
-end
+# function compute_coefficients!(u, func, t, domain::AbstractDomain{3}, equations,
+#                                solver::RBFSolver,
+#                                cache)
+#     @threaded for element in eachelement(solver, cache)
+#         for k in eachnode(solver), j in eachnode(solver), i in eachnode(solver)
+#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
+#                                      i,
+#                                      j, k, element)
+#             u_node = func(x_node, t, equations)
+#             set_node_vars!(u, u_node, equations, solver, i, j, k, element)
+#         end
+#     end
+# end
 
 # Discretizations specific to each domain type of Trixi.jl
 # If some functionality is shared by multiple combinations of meshes/solvers,

@@ -84,6 +84,7 @@ import SciMLBase: get_du, get_tmp_cache, u_modified!,
                   AbstractODEIntegrator, init, step!, check_error,
                   get_proposed_dt, set_proposed_dt!,
                   terminate!, remake, add_tstop!, has_tstop, first_tstop
+using DiffEqCallbacks: PeriodicCallback, PeriodicCallbackAffect
 using DelimitedFiles
 import DynamicPolynomials: @polyvar
 import DynamicPolynomials: monomials
@@ -134,7 +135,7 @@ include("callbacks_step/callbacks_step.jl")
 # include("auxiliary/special_elixirs.jl")
 
 # Plot recipes and conversion functions to visualize results with Plots.jl
-# include("visualization/visualization.jl")
+include("visualization/visualization.jl")
 
 # export types/functions that define the public API of Trixi.jl
 
@@ -165,7 +166,7 @@ export concrete_rbf_flux_basis, concrete_poly_flux_basis, compute_flux_operator
 export RefPointData, Point1D, Point2D, Point3D,
        PointCloudBasis, PolyharmonicSpline, RBF
 
-export HistoryCallback, InfoCallback
+export HistoryCallback, InfoCallback, SolutionSavingCallback
 
 export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
        SourceUpwindViscosityTominec,

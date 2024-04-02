@@ -6,6 +6,7 @@ version = "1.0.0-DEV"
 [deps]
 ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
+DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
 DynamicPolynomials = "7c1d4256-1411-5781-91ec-d7bc3513ac07"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
