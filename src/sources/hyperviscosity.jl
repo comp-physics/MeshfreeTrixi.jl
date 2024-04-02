@@ -241,12 +241,14 @@ function update_upwind_visc!(eps_uw, u,
         # Compute local speed (magnitude of velocity) and sound speed
         speed = sqrt(v1^2 + v2^2)
         # sound_speed = NaNMath.sqrt(gamma * p / rho)
-        # if p < 0.0
-        #     p = 0.0
-        # end
-        # if rho < 0.0
-        #     rho = 0.0
-        # end
+        # Work around for positivity-preserving of p and rho
+        # TODO: Proper way is likely to use stage limiter
+        if p < 0.0
+            p = 0.0
+        end
+        if rho < 0.0
+            rho = 0.0
+        end
         sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
