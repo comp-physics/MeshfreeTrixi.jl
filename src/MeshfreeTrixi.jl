@@ -108,6 +108,7 @@ using TimerOutputs: TimerOutputs, @notimeit, TimerOutput, print_timer, reset_tim
 using SimpleUnPack: @pack!
 using NaNMath
 using Printf: @printf, @sprintf
+using WriteVTK: vtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
