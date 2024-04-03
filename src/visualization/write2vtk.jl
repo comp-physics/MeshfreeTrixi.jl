@@ -1,12 +1,40 @@
+# Helper functions 
+function assemble_systems(semi)
+    # Check if `source_terms.sources` exists
+    if hasproperty(semi.source_terms, :sources)
+        # `source_terms.sources` exists, use it
+        return (semi.equations, semi.source_terms.sources...)
+    else
+        # `source_terms.sources` does not exist, fall back to `source_terms`
+        return (semi.equations, semi.source_terms)
+    end
+end
 # Code based on TrixiParticles.jl
+# Same as `foreach`, but it optimizes away for small input tuples
+@inline function foreach_noalloc(func, collection)
+    element = first(collection)
+    remaining_collection = Base.tail(collection)
+
+    func(element)
+
+    # Process remaining collection
+    foreach_noalloc(func, remaining_collection)
+end
+
+@inline foreach_noalloc(func, collection::Tuple{}) = nothing
+# This is just for readability to loop over all systems without allocations
+# We construct our own "system" instead of containing on in semi
+# @inline foreach_system(f, semi::Union{NamedTuple, Semidiscretization}) = foreach_noalloc(f,
+#                                                                                          semi.systems)
+@inline foreach_system(f, systems) = foreach_noalloc(f, systems)
 """
-    trixi2vtk(vu_ode, semi, t; iter=nothing, output_directory="out", prefix="",
+    trixi2vtk(u_ode, semi, t; iter=nothing, output_directory="out", prefix="",
               write_meta_data=true, max_coordinates=Inf, custom_quantities...)
 
 Convert Trixi simulation data to VTK format.
 
 # Arguments
-- `vu_ode`: Solution of the TrixiParticles ODE system at one time step.
+- `u_ode`: Solution of the TrixiParticles ODE system at one time step.
             This expects an `ArrayPartition` as returned in the examples as `sol.u[end]`.
 - `semi`:   Semidiscretization of the TrixiParticles simulation.
 - `t`:      Current time of the simulation.
@@ -20,10 +48,10 @@ Convert Trixi simulation data to VTK format.
 - `max_coordinates=Inf`     The coordinates of particles will be clipped if their absolute
                             values exceed this threshold.
 - `custom_quantities...`:   Additional custom quantities to include in the VTK output.
-                            Each custom quantity must be a function of `(v, u, t, system)`,
-                            which will be called for every system, where `v` and `u` are the
+                            Each custom quantity must be a function of `(u, u, t, system)`,
+                            which will be called for every system, where `u` and `u` are the
                             wrapped solution arrays for the corresponding system and `t` is
-                            the current simulation time. Note that working with these `v`
+                            the current simulation time. Note that working with these `u`
                             and `u` arrays requires undocumented internal functions of
                             TrixiParticles. See [Custom Quantities](@ref custom_quantities)
                             for a list of pre-defined custom quantities that can be used here.
@@ -39,25 +67,32 @@ trixi2vtk(sol.u[end], semi, 0.0, iter=1, my_custom_quantity=kinetic_energy)
 
 ```
 """
-function trixi2vtk(vu_ode, semi, t; iter = nothing, output_directory = "out", prefix = "",
+function trixi2vtk(u_ode, semi, t; iter = nothing, output_directory = "out", prefix = "",
                    write_meta_data = true, max_coordinates = Inf, custom_quantities...)
-    (; systems) = semi
-    v_ode, u_ode = vu_ode.x
+    # (; systems) = semi
+    # v_ode, u_ode = u_ode.x
+
+    # Package together objects to be saved 
+    systems = assemble_systems(semi)
 
     # Update quantities that are stored in the systems. These quantities (e.g. pressure)
     # still have the values from the last stage of the previous step if not updated here.
-    update_systems_and_nhs(v_ode, u_ode, semi, t)
+    # update_systems_and_nhs(v_ode, u_ode, semi, t)
 
     filenames = system_names(systems)
 
-    foreach_system(semi) do system
-        system_index = system_indices(system, semi)
+    foreach_system(systems) do system
+        system_index = system_indices(system, systems)
 
-        v = wrap_v(v_ode, system, semi)
-        u = wrap_u(u_ode, system, semi)
-        periodic_box = get_neighborhood_search(system, semi).periodic_box
+        # Not sure if we need to wrap u_ode or not 
+        # Seems this is mostly needed for changing the size of the array 
+        # or wrapping to another type of array
+        # v = wrap_v(v_ode, system, semi)
+        # u = wrap_u(u_ode, system, semi)
+        # periodic_box = get_neighborhood_search(system, semi).periodic_box
+        u = wrap_array(u_ode, semi.domain, semi.equations, semi.solver, semi.cache)
 
-        trixi2vtk(v, u, t, system, periodic_box;
+        trixi2vtk(u, t, system, periodic_box;
                   output_directory = output_directory,
                   system_name = filenames[system_index], iter = iter, prefix = prefix,
                   write_meta_data = write_meta_data, max_coordinates = max_coordinates,
@@ -66,7 +101,7 @@ function trixi2vtk(vu_ode, semi, t; iter = nothing, output_directory = "out", pr
 end
 
 # Convert data for a single TrixiParticle system to VTK format
-function trixi2vtk(v, u, t, system, periodic_box; output_directory = "out", prefix = "",
+function trixi2vtk(u, t, system, periodic_box; output_directory = "out", prefix = "",
                    iter = nothing, system_name = vtkname(system), write_meta_data = true,
                    max_coordinates = Inf,
                    custom_quantities...)
@@ -99,7 +134,7 @@ function trixi2vtk(v, u, t, system, periodic_box; output_directory = "out", pref
     end
 
     vtk_grid(file, points, cells) do vtk
-        write2vtk!(vtk, v, u, t, system, write_meta_data = write_meta_data)
+        write2vtk!(vtk, u, t, system, write_meta_data = write_meta_data)
 
         # Store particle index
         vtk["index"] = eachparticle(system)
@@ -112,7 +147,7 @@ function trixi2vtk(v, u, t, system, periodic_box; output_directory = "out", pref
 
         # Extract custom quantities for this system
         for (key, quantity) in custom_quantities
-            value = custom_quantity(quantity, v, u, t, system)
+            value = custom_quantity(quantity, u, t, system)
             if value !== nothing
                 vtk[string(key)] = value
             end
@@ -124,13 +159,13 @@ function trixi2vtk(v, u, t, system, periodic_box; output_directory = "out", pref
     vtk_save(pvd)
 end
 
-function custom_quantity(quantity::AbstractArray, v, u, t, system)
+function custom_quantity(quantity::AbstractArray, u, t, system)
     return quantity
 end
 
-function custom_quantity(quantity, v, u, t, system)
-    # Assume `quantity` is a function of `v`, `u`, `t`, and `system`
-    return quantity(v, u, t, system)
+function custom_quantity(quantity, u, t, system)
+    # Assume `quantity` is a function of `u`, `u`, `t`, and `system`
+    return quantity(u, u, t, system)
 end
 
 """
@@ -174,11 +209,12 @@ function trixi2vtk(coordinates; output_directory = "out", prefix = "",
     return file
 end
 
-function write2vtk!(vtk, v, u, t, system::FluidSystem; write_meta_data = true)
-    vtk["velocity"] = view(v, 1:ndims(system), :)
-    vtk["density"] = [particle_density(v, system, particle)
+### Instead of system::SysType, use a combination of Eqns and Source Types to dispatch
+function write2vtk!(vtk, u, t, system::FluidSystem; write_meta_data = true)
+    vtk["velocity"] = view(u, 1:ndims(system), :)
+    vtk["density"] = [particle_density(u, system, particle)
                       for particle in eachparticle(system)]
-    vtk["pressure"] = [particle_pressure(v, system, particle)
+    vtk["pressure"] = [particle_pressure(u, system, particle)
                        for particle in eachparticle(system)]
 
     if write_meta_data
@@ -223,10 +259,10 @@ function write2vtk!(vtk, viscosity::ArtificialViscosityMonaghan)
     vtk["viscosity_epsilon"] = viscosity.epsilon
 end
 
-function write2vtk!(vtk, v, u, t, system::TotalLagrangianSPHSystem; write_meta_data = true)
+function write2vtk!(vtk, u, t, system::TotalLagrangianSPHSystem; write_meta_data = true)
     n_fixed_particles = nparticles(system) - n_moving_particles(system)
 
-    vtk["velocity"] = hcat(view(v, 1:ndims(system), :),
+    vtk["velocity"] = hcat(view(u, 1:ndims(system), :),
                            zeros(ndims(system), n_fixed_particles))
     vtk["jacobian"] = [det(deformation_gradient(system, particle))
                        for particle in eachparticle(system)]
@@ -251,20 +287,20 @@ function write2vtk!(vtk, v, u, t, system::TotalLagrangianSPHSystem; write_meta_d
         vtk["smoothing_length"] = system.smoothing_length
     end
 
-    write2vtk!(vtk, v, u, t, system.boundary_model, system,
+    write2vtk!(vtk, u, t, system.boundary_model, system,
                write_meta_data = write_meta_data)
 end
 
-function write2vtk!(vtk, v, u, t, system::BoundarySPHSystem; write_meta_data = true)
-    write2vtk!(vtk, v, u, t, system.boundary_model, system,
+function write2vtk!(vtk, u, t, system::BoundarySPHSystem; write_meta_data = true)
+    write2vtk!(vtk, u, u, t, system.boundary_model, system,
                write_meta_data = write_meta_data)
 end
 
-function write2vtk!(vtk, v, u, t, model, system; write_meta_data = true)
+function write2vtk!(vtk, u, t, model, system; write_meta_data = true)
     return vtk
 end
 
-function write2vtk!(vtk, v, u, t, model::BoundaryModelMonaghanKajtar, system;
+function write2vtk!(vtk, u, t, model::BoundaryModelMonaghanKajtar, system;
                     write_meta_data = true)
     if write_meta_data
         vtk["boundary_model"] = "BoundaryModelMonaghanKajtar"
@@ -273,7 +309,7 @@ function write2vtk!(vtk, v, u, t, model::BoundaryModelMonaghanKajtar, system;
     end
 end
 
-function write2vtk!(vtk, v, u, t, model::BoundaryModelDummyParticles, system;
+function write2vtk!(vtk, u, t, model::BoundaryModelDummyParticles, system;
                     write_meta_data = true)
     if write_meta_data
         vtk["boundary_model"] = "BoundaryModelDummyParticles"
@@ -283,13 +319,13 @@ function write2vtk!(vtk, v, u, t, model::BoundaryModelDummyParticles, system;
         vtk["state_equation"] = type2string(system.boundary_model.state_equation)
     end
 
-    write2vtk!(vtk, v, u, t, model, model.viscosity, system,
+    write2vtk!(vtk, u, t, model, model.viscosity, system,
                write_meta_data = write_meta_data)
 end
 
-function write2vtk!(vtk, v, u, t, model::BoundaryModelDummyParticles, viscosity, system;
+function write2vtk!(vtk, u, t, model::BoundaryModelDummyParticles, viscosity, system;
                     write_meta_data = true)
-    vtk["hydrodynamic_density"] = [particle_density(v, system, particle)
+    vtk["hydrodynamic_density"] = [particle_density(u, system, particle)
                                    for particle in eachparticle(system)]
     vtk["pressure"] = model.pressure
 
@@ -300,9 +336,9 @@ function write2vtk!(vtk, v, u, t, model::BoundaryModelDummyParticles, viscosity,
     return vtk
 end
 
-function write2vtk!(vtk, v, u, t, model::BoundaryModelDummyParticles,
+function write2vtk!(vtk, u, t, model::BoundaryModelDummyParticles,
                     viscosity::ViscosityAdami, system; write_meta_data = true)
-    vtk["hydrodynamic_density"] = [particle_density(v, system, particle)
+    vtk["hydrodynamic_density"] = [particle_density(u, system, particle)
                                    for particle in eachparticle(system)]
     vtk["pressure"] = model.pressure
     vtk["wall_velocity"] = view(model.cache.wall_velocity, 1:ndims(system), :)

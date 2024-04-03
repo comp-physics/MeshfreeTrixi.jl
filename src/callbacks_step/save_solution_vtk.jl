@@ -134,9 +134,10 @@ function initialize_save_cb!(solution_callback::SolutionSavingCallback, u, t, in
     # Save initial solution
     if solution_callback.save_initial_solution
         # Update systems to compute quantities like density and pressure.
-        semi = integrator.p
-        v_ode, u_ode = u.x
-        update_systems_and_nhs(v_ode, u_ode, semi, t)
+        # semi = integrator.p
+        # v_ode, u_ode = u.x
+        # update_systems_and_nhs(v_ode, u_ode, semi, t)
+        # Don't believe we need these
 
         # Apply the callback.
         solution_callback(integrator)
@@ -158,7 +159,7 @@ function (solution_callback::SolutionSavingCallback)(integrator)
     (; interval, output_directory, custom_quantities, write_meta_data,
     verbose, prefix, latest_saved_iter, max_coordinates) = solution_callback
 
-    vu_ode = integrator.u
+    u_ode = integrator.u
     semi = integrator.p
     iter = get_iter(interval, integrator)
 
@@ -177,7 +178,9 @@ function (solution_callback::SolutionSavingCallback)(integrator)
         println("Writing solution to $output_directory at t = $(integrator.t)")
     end
 
-    @trixi_timeit timer() "save solution" trixi2vtk(vu_ode, semi, integrator.t; iter = iter,
+    # Main solution method that subdispatches individual trixi2vtk calls
+    # For things like cons var, prim var, source var, etc.
+    @trixi_timeit timer() "save solution" trixi2vtk(u_ode, semi, integrator.t; iter = iter,
                                                     output_directory = output_directory,
                                                     prefix = prefix,
                                                     write_meta_data = write_meta_data,
