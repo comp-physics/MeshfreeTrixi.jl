@@ -159,8 +159,9 @@ SourceUpwindViscosityTominec(solver, equations, domain)
 Construct an untargeted Residual Viscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceUpwindViscosityTominec(solver, equations, domain; c = 1.0, polydeg = 4)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c, polydeg)...)
+function SourceUpwindViscosityTominec(solver, equations, domain; c = 1.0, c_uw = 1.0,
+                                      polydeg = 4)
+    cache = (; create_tominec_rv_cache(solver, equations, domain, c, c_uw, polydeg)...)
 
     SourceUpwindViscosityTominec{typeof(cache)}(cache)
 end
@@ -179,14 +180,16 @@ SourceResidualViscosityTominec(solver, equations, domain)
 Construct a targeted Residual Viscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0, polydeg = 4)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c, polydeg)...)
+function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0, c_uw = 1.0,
+                                        polydeg = 4)
+    cache = (; create_tominec_rv_cache(solver, equations, domain, c, c_uw, polydeg)...)
 
     SourceResidualViscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_rv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real, polydeg::Int)
+                                 domain::PointCloudDomain, c::Real, c_uw::Real,
+                                 polydeg::Int)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -223,7 +226,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
                                         solver)
     success_iter = [0]
 
-    return (; eps_uw, eps_rv, eps, eps_c, c, residual, approx_du, time_history,
+    return (; eps_uw, eps_rv, eps, eps_c, c, c_uw, residual, approx_du, time_history,
             time_weights,
             sol_history, success_iter)
 end
@@ -243,21 +246,29 @@ function update_upwind_visc!(eps_uw, u,
         # sound_speed = NaNMath.sqrt(gamma * p / rho)
         # Work around for positivity-preserving of p and rho
         # TODO: Proper way is likely to use stage limiter
-        if p < 0.0
-            p = 0.0
-        end
-        if rho < 0.0
-            rho = 0.0
-        end
+        # if p < 0.0
+        #     p = 0.0
+        # end
+        # if rho < 0.0
+        #     rho = 0.0
+        # end
+        # if p < 0.0 || rho < 0.0
+        #     p = 0.0
+        #     rho = 0.0
+        #     sound_speed = 0
+        # else
+        #     sound_speed = sqrt(gamma * p / rho)
+        # end
         sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
         # instead we just take the distance from x_i to the nearest neighbor
-        h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        h_loc = domain.pd.dx_avg
 
         # Calculate upwind viscosity for the current point
-        eps_uw[idx] = 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
+        eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
 end
 

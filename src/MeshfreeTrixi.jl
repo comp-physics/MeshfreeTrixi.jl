@@ -130,7 +130,7 @@ include("solvers/solvers.jl")
 # include("semidiscretization/semidiscretization.jl")
 include("sources/generic_sources.jl")
 include("callbacks_step/callbacks_step.jl")
-# include("callbacks_stage/callbacks_stage.jl")
+include("callbacks_stage/callbacks_stage.jl")
 
 # `trixi_include` and special elixirs such as `convergence_test`
 # include("auxiliary/special_elixirs.jl")
