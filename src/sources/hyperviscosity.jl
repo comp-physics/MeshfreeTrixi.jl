@@ -113,7 +113,7 @@ function create_tominec_hv_cache(solver::PointCloudSolver, equations,
     hv_differentiation_matrix = lap' * lap
 
     # Scale hv by gamma 
-    gamma = c * domain.pd.dx_min^(2 * 2 + 0.5)
+    gamma = c * domain.pd.dx_min^(4.5)
 
     return (; hv_differentiation_matrix, gamma, c)
 end
@@ -252,14 +252,14 @@ function update_upwind_visc!(eps_uw, u,
         # if rho < 0.0
         #     rho = 0.0
         # end
-        # if p < 0.0 || rho < 0.0
-        #     p = 0.0
-        #     rho = 0.0
-        #     sound_speed = 0
-        # else
-        #     sound_speed = sqrt(gamma * p / rho)
-        # end
-        sound_speed = sqrt(gamma * p / rho)
+        if p < 0.0 || rho < 0.0
+            p = 0.0
+            rho = 0.0
+            sound_speed = 0
+        else
+            sound_speed = sqrt(gamma * p / rho)
+        end
+        # sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -358,9 +358,9 @@ function (source::SourceUpwindViscosityTominec)(du, u, t, domain, equations,
                             local_u, u)
         apply_to_each_field(mul_by!(eps), local_u, local_u)
         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', -1),
-                            local_rhs, local_u)
+                            du, local_u)
     end
-    du .+= local_rhs
+    # du .+= local_rhs
 end
 
 function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
@@ -387,7 +387,7 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
                             local_u, u)
         apply_to_each_field(mul_by!(eps), local_u, local_u)
         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', -1),
-                            local_rhs, local_u)
+                            du, local_u)
     end
-    du .+= local_rhs
+    # du .+= local_rhs
 end

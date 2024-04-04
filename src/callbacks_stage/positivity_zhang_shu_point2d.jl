@@ -31,7 +31,7 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
         value_min < threshold || continue
 
         # compute mean value
-        u_mean = SVector(zeros(eltype(u[element]), solver.num_vars)...)
+        u_mean = SVector(zeros(eltype(u[element]), nvariables(equations))...)
         for i in domain.pd.neighbors[element]
             u_mean += u[i]
         end
@@ -55,8 +55,9 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
         # end
     end
 
+    zero_el = SVector(zeros(eltype(u[1]), nvariables(equations))...)
     for element in eachindex(u)
-        if local_u[element] != 0.0
+        if local_u[element] != zero_el
             u[element] = local_u[element]
         end
     end
