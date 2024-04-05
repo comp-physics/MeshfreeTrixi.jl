@@ -6,8 +6,8 @@
 #! format: noindent
 
 function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
-    domain::PointCloudDomain{2}, equations,
-    solver::PointCloudSolver, cache)
+                                  domain::PointCloudDomain{2}, equations,
+                                  solver::PointCloudSolver, cache)
     # @unpack weights = solver.basis
     local_u = cache.local_values_threaded[1]
     set_to_zero!(local_u)

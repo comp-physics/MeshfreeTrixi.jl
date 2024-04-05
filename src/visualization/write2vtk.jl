@@ -62,7 +62,7 @@ function get_git_hash()
 
     try
         git_cmd = Cmd(`git describe --tags --always --first-parent --dirty`,
-            dir=pkg_directory)
+                      dir = pkg_directory)
         return string(readchomp(git_cmd))
     catch e
         return "UnknownVersion"
@@ -109,8 +109,8 @@ trixi2vtk(sol.u[end], semi, 0.0, iter=1, my_custom_quantity=kinetic_energy)
 
 ```
 """
-function trixi2vtk(u_ode, semi, t; iter=nothing, output_directory="out", prefix="",
-    write_meta_data=true, max_coordinates=Inf, custom_quantities...)
+function trixi2vtk(u_ode, semi, t; iter = nothing, output_directory = "out", prefix = "",
+                   write_meta_data = true, max_coordinates = Inf, custom_quantities...)
     # (; systems) = semi
     # v_ode, u_ode = u_ode.x
 
@@ -135,18 +135,18 @@ function trixi2vtk(u_ode, semi, t; iter=nothing, output_directory="out", prefix=
         u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
 
         trixi2vtk(u, t, system, semi;
-            output_directory=output_directory,
-            system_name=filenames[system_index], iter=iter, prefix=prefix,
-            write_meta_data=write_meta_data, max_coordinates=max_coordinates,
-            custom_quantities...)
+                  output_directory = output_directory,
+                  system_name = filenames[system_index], iter = iter, prefix = prefix,
+                  write_meta_data = write_meta_data, max_coordinates = max_coordinates,
+                  custom_quantities...)
     end
 end
 
 # Convert data for a single TrixiParticle system to VTK format
-function trixi2vtk(u, t, system, semi; output_directory="out", prefix="",
-    iter=nothing, system_name=vtkname(system), write_meta_data=true,
-    max_coordinates=Inf,
-    custom_quantities...)
+function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
+                   iter = nothing, system_name = vtkname(system), write_meta_data = true,
+                   max_coordinates = Inf,
+                   custom_quantities...)
     mkpath(output_directory)
 
     # handle "_" on optional pre/postfix strings
@@ -154,14 +154,14 @@ function trixi2vtk(u, t, system, semi; output_directory="out", prefix="",
     add_opt_str_post(str) = (str === nothing ? "" : "_$(str)")
 
     file = joinpath(output_directory,
-        add_opt_str_pre(prefix) * "$system_name"
-        * add_opt_str_post(iter))
+                    add_opt_str_pre(prefix) * "$system_name"
+                    * add_opt_str_post(iter))
 
     collection_file = joinpath(output_directory,
-        add_opt_str_pre(prefix) * "$system_name")
+                               add_opt_str_pre(prefix) * "$system_name")
 
     # Reset the collection when the iteration is 0
-    pvd = paraview_collection(collection_file; append=iter > 0)
+    pvd = paraview_collection(collection_file; append = iter > 0)
 
     # points = periodic_coords(current_coordinates(u, system))
     points = reduce(hcat, semi.mesh.pd.points) # TODO: Remove allocations here
@@ -178,7 +178,8 @@ function trixi2vtk(u, t, system, semi; output_directory="out", prefix="",
 
     save_tag = string(nameof(typeof(system)))
     vtk_grid(file, points, cells) do vtk
-        @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi, write_meta_data=write_meta_data)
+        @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                          write_meta_data = write_meta_data)
 
         # Store particle index
         vtk["index"] = eachelement(semi.mesh, semi.solver, semi.cache)
@@ -229,9 +230,9 @@ Convert coordinate data to VTK format.
 # Returns
 - `file::AbstractString`: Path to the generated VTK file.
 """
-function trixi2vtk(coordinates; output_directory="out", prefix="",
-    filename="coordinates",
-    custom_quantities...)
+function trixi2vtk(coordinates; output_directory = "out", prefix = "",
+                   filename = "coordinates",
+                   custom_quantities...)
     mkpath(output_directory)
     file = prefix === "" ? joinpath(output_directory, filename) :
            joinpath(output_directory, "$(prefix)_$filename")
@@ -256,10 +257,10 @@ end
 
 ### Instead of system::SysType, use a combination of Eqns and Source Types to dispatch
 function write2vtk!(vtk, u, t, system, semi; write_meta_data)
-
     return vtk
 end
-function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi; write_meta_data=true)
+function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi;
+                    write_meta_data = true)
     # Export conservative variables
     vtk["density"] = getindex.(u, 1)
     vtk["density_energy"] = getindex.(u, 4)
@@ -305,9 +306,51 @@ function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi; write
 
     return vtk
 end
-function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi; write_meta_data=true)
+
+function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi;
+                    write_meta_data = true)
     vtk["eps"] = system.cache.eps
     vtk["eps_scalar"] = system.cache.eps_c
+    # vtk["density"] = [particle_density(u, system, particle)
+    #                   for particle in eachparticle(system)]
+    # vtk["pressure"] = [particle_pressure(u, system, particle)
+    #                    for particle in eachparticle(system)]
+
+    # if write_meta_data
+    #     vtk["acceleration"] = system.acceleration
+    #     vtk["viscosity"] = type2string(system.viscosity)
+    #     write2vtk!(vtk, system.viscosity)
+    #     vtk["smoothing_kernel"] = type2string(system.smoothing_kernel)
+    #     vtk["smoothing_length"] = system.smoothing_length
+    #     vtk["density_calculator"] = type2string(system.density_calculator)
+
+    #     if system isa WeaklyCompressibleSPHSystem
+    #         vtk["correction_method"] = type2string(system.correction)
+    #         if system.correction isa AkinciFreeSurfaceCorrection
+    #             vtk["correction_rho0"] = system.correction.rho0
+    #         end
+    #         vtk["state_equation"] = type2string(system.state_equation)
+    #         vtk["state_equation_rho0"] = system.state_equation.reference_density
+    #         vtk["state_equation_pa"] = system.state_equation.background_pressure
+    #         vtk["state_equation_c"] = system.state_equation.sound_speed
+    #         vtk["state_equation_exponent"] = system.state_equation.exponent
+
+    #         vtk["solver"] = "WCSPH"
+    #     else
+    #         vtk["solver"] = "EDAC"
+    #         vtk["sound_speed"] = system.sound_speed
+    #     end
+    # end
+
+    return vtk
+end
+
+function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
+                    write_meta_data = true)
+    vtk["eps"] = system.cache.eps
+    vtk["eps_scalar"] = system.cache.eps_c
+    vtk["eps_uw"] = system.cache.eps_uw
+    vtk["eps_rv"] = system.cache.eps_rv
     # vtk["density"] = [particle_density(u, system, particle)
     #                   for particle in eachparticle(system)]
     # vtk["pressure"] = [particle_pressure(u, system, particle)

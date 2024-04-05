@@ -497,7 +497,9 @@ end
 function calc_sources!(du, u, t, source_terms,
                        domain, equations, solver::PointCloudSolver, cache)
     for source in values(source_terms)
-        source(du, u, t, domain, equations, solver, cache)
+        save_tag = string(nameof(typeof(source)))
+        @trixi_timeit timer() "calc $save_tag" source(du, u, t, domain, equations,
+                                                      solver, cache)
     end
 end
 

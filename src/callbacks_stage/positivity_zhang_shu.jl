@@ -18,8 +18,8 @@ using the associated `thresholds` to determine the minimal acceptable values.
 The order of the `variables` is important and might have a strong influence
 on the robustness.
 """
-struct PositivityPreservingLimiterZhangShu{N,Thresholds<:NTuple{N,<:Real},
-    Variables<:NTuple{N,Any}}
+struct PositivityPreservingLimiterZhangShu{N, Thresholds <: NTuple{N, <:Real},
+                                           Variables <: NTuple{N, Any}}
     thresholds::Thresholds
     variables::Variables
 end
@@ -29,12 +29,12 @@ function PositivityPreservingLimiterZhangShu(; thresholds, variables)
 end
 
 function (limiter!::PositivityPreservingLimiterZhangShu)(u_ode, integrator,
-    semi::AbstractSemidiscretization,
-    t)
+                                                         semi::AbstractSemidiscretization,
+                                                         t)
     u = wrap_array(u_ode, semi)
     @trixi_timeit timer() "positivity-preserving limiter" begin
         limiter_zhang_shu!(u, limiter!.thresholds, limiter!.variables,
-            mesh_equations_solver_cache(semi)...)
+                           mesh_equations_solver_cache(semi)...)
     end
 end
 
@@ -46,8 +46,8 @@ end
 # Note that you shouldn't use this with too many elements per tuple since the
 # compile times can increase otherwise - but a handful of elements per tuple
 # is definitely fine.
-function limiter_zhang_shu!(u, thresholds::NTuple{N,<:Real}, variables::NTuple{N,Any},
-    mesh, equations, solver, cache) where {N}
+function limiter_zhang_shu!(u, thresholds::NTuple{N, <:Real}, variables::NTuple{N, Any},
+                            mesh, equations, solver, cache) where {N}
     threshold = first(thresholds)
     remaining_thresholds = Base.tail(thresholds)
     variable = first(variables)
@@ -55,13 +55,13 @@ function limiter_zhang_shu!(u, thresholds::NTuple{N,<:Real}, variables::NTuple{N
 
     limiter_zhang_shu!(u, threshold, variable, mesh, equations, solver, cache)
     limiter_zhang_shu!(u, remaining_thresholds, remaining_variables, mesh, equations,
-        solver, cache)
+                       solver, cache)
     return nothing
 end
 
 # terminate the type-stable iteration over tuples
 function limiter_zhang_shu!(u, thresholds::Tuple{}, variables::Tuple{},
-    mesh, equations, solver, cache)
+                            mesh, equations, solver, cache)
     nothing
 end
 

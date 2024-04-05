@@ -180,15 +180,15 @@ SourceResidualViscosityTominec(solver, equations, domain)
 Construct a targeted Residual Viscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0, c_uw = 1.0,
+function SourceResidualViscosityTominec(solver, equations, domain; c_rv = 1.0, c_uw = 1.0,
                                         polydeg = 4)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c, c_uw, polydeg)...)
+    cache = (; create_tominec_rv_cache(solver, equations, domain, c_rv, c_uw, polydeg)...)
 
     SourceResidualViscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_rv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real, c_uw::Real,
+                                 domain::PointCloudDomain, c_rv::Real, c_uw::Real,
                                  polydeg::Int)
     # Get basis and domain info
     basis = solver.basis
@@ -226,7 +226,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
                                         solver)
     success_iter = [0]
 
-    return (; eps_uw, eps_rv, eps, eps_c, c, c_uw, residual, approx_du, time_history,
+    return (; eps_uw, eps_rv, eps, eps_c, c_rv, c_uw, residual, approx_du, time_history,
             time_weights,
             sol_history, success_iter)
 end
@@ -275,7 +275,7 @@ end
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache)
-    @unpack residual, approx_du, c = cache
+    @unpack residual, approx_du, c_rv = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
     local_u = local_values_threaded[1]
     local_rhs = rhs_local_threaded[1]
@@ -306,10 +306,11 @@ function update_residual_visc!(eps_rv, du, u,
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
         # instead we just take the distance from x_i to the nearest neighbor
-        h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        h_loc = domain.pd.dx_avg
 
         # Calculate upwind viscosity for the current point
-        eps_rv[idx] = 0.5 * c * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
+        eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
     end
 end
 
