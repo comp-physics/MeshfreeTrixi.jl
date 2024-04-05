@@ -222,10 +222,14 @@ function shift_stencil(X_local::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
         X_shift[j] = X_local[j] - x_shift
     end
 
-    # Add small offset to prevent div-by-0
+    # Scale and add small offset to prevent div-by-0
+    scaling_factors = [1.0 / maximum(abs.(getindex.(X_shift, i))) for i in 1:NDIMS]
+    for j in eachindex(X_local)
+        X_shift[j] = X_shift[j] .* scaling_factors
+    end
     X_shift[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...))
 
-    return X_shift
+    return X_shift, scaling_factors
 end
 
 function interpolation_block(R::Matrix, P::Matrix)
@@ -362,7 +366,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -372,8 +376,8 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
-        Dy_loc[e, :] = weights[1:(num_neighbors), 2]
+        Dx_loc[e, :] = scaling_factors[1] .* weights[1:(num_neighbors), 1]
+        Dy_loc[e, :] = scaling_factors[2] .* weights[1:(num_neighbors), 2]
         E_loc[e, :] = weights[1:(num_neighbors), 3]
     end
     # Generate Sparse Matrices from Local Operator Matrices
@@ -406,7 +410,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -416,7 +420,7 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dx_loc[e, :] = scaling_factors[1] .* weights[1:(num_neighbors), 1]
         # Dy_loc[i, :] = weights[1:(num_neighbors), 2]
         E_loc[e, :] = weights[1:(num_neighbors), 2]
     end
@@ -451,7 +455,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -461,9 +465,9 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
-        Dy_loc[e, :] = weights[1:(num_neighbors), 2]
-        Dz_loc[e, :] = weights[1:(num_neighbors), 3]
+        Dx_loc[e, :] = scaling_factors[1] .* weights[1:(num_neighbors), 1]
+        Dy_loc[e, :] = scaling_factors[2] .* weights[1:(num_neighbors), 2]
+        Dz_loc[e, :] = scaling_factors[3] .* weights[1:(num_neighbors), 3]
         E_loc[e, :] = weights[1:(num_neighbors), 4]
     end
     # Generate Sparse Matrices from Local Operator Matrices
@@ -499,7 +503,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -509,8 +513,8 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
-        Dyk_loc[e, :] = weights[1:(num_neighbors), 2]
+        Dxk_loc[e, :] = scaling_factors[1]^k .* weights[1:(num_neighbors), 1]
+        Dyk_loc[e, :] = scaling_factors[2]^k .* weights[1:(num_neighbors), 2]
         E_loc[e, :] = weights[1:(num_neighbors), 3]
     end
     # Generate Sparse Matrices from Local Operator Matrices
@@ -545,7 +549,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -555,9 +559,9 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
-        Dyk_loc[e, :] = weights[1:(num_neighbors), 2]
-        Dzk_loc[e, :] = weights[1:(num_neighbors), 3]
+        Dxk_loc[e, :] = scaling_factors[1]^k .* weights[1:(num_neighbors), 1]
+        Dyk_loc[e, :] = scaling_factors[2]^k .* weights[1:(num_neighbors), 2]
+        Dzk_loc[e, :] = scaling_factors[3]^k .* weights[1:(num_neighbors), 3]
         E_loc[e, :] = weights[1:(num_neighbors), 4]
     end
     # Generate Sparse Matrices from Local Operator Matrices
@@ -591,7 +595,7 @@ function compute_flux_operator(solver::RBFSolver,
         # Create Interpolation System
         neighbor_idx = neighbors[e]
         local_points = points[neighbor_idx]
-        local_points_shifted = shift_stencil(local_points)
+        local_points_shifted, scaling_factors = shift_stencil(local_points)
         R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
         P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
         M = interpolation_block(R, P)
@@ -601,7 +605,8 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dxk_loc[e, :] = scaling_factors[1]^k .*
+                        weights[1:(num_neighbors), 1]
         E_loc[e, :] = weights[1:(num_neighbors), 2]
     end
     # Generate Sparse Matrices from Local Operator Matrices
