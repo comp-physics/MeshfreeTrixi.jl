@@ -17,3 +17,4 @@ function Base.show(io::IO, terms::SourceTerms)
 end
 
 include("hyperviscosity.jl")
+include("IGR.jl")

@@ -385,6 +385,13 @@ function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
     return vtk
 end
 
+function write2vtk!(vtk, u, t, system::SourceIGR, semi;
+                    write_meta_data = true)
+    vtk["sigma"] = system.cache.sigma
+
+    return vtk
+end
+
 write2vtk!(vtk, viscosity::Nothing) = vtk
 
 # function write2vtk!(vtk, viscosity::ViscosityAdami)

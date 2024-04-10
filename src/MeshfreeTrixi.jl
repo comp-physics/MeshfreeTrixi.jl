@@ -109,6 +109,9 @@ using SimpleUnPack: @pack!
 using NaNMath
 using Printf: @printf, @sprintf
 using WriteVTK: vtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
+using IterativeSolvers
+import Base: *
+import LinearAlgebra: mul!
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.
@@ -171,7 +174,8 @@ export HistoryCallback, InfoCallback, SolutionSavingCallback
 
 export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
        SourceUpwindViscosityTominec,
-       SourceResidualViscosityTominec
+       SourceResidualViscosityTominec,
+       SourceIGR
 
 # Visualization-related exports
 # export PlotData1D, PlotData2D, ScalarPlotData2D, getmesh, adapt_to_mesh_level!,
