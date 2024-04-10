@@ -134,9 +134,9 @@ function (source::SourceHyperviscosityTominec)(du, u, t, domain, equations,
 end
 
 """
-    SourceHyperviscosityTominec
+    SourceUpwindViscosityTominec
 
-A struct containing everything needed to describe a targeted
+A struct containing everything needed to describe an untargeted
 dissipation term for an RBF-FD discretization. 
 ## References
 
@@ -166,6 +166,18 @@ function SourceUpwindViscosityTominec(solver, equations, domain; c = 1.0, c_uw =
     SourceUpwindViscosityTominec{typeof(cache)}(cache)
 end
 
+"""
+    SourceHyperviscosityTominec
+
+A struct containing everything needed to describe a targeted
+dissipation term for an RBF-FD discretization. 
+## References
+
+- Tominec (2023)
+  Residual Viscosity Stabilized RBF-FD Methods for Solving
+  Nonlinear Conservation Laws
+  [doi: 10.1007/s10915-022-02055-8](https://doi.org/10.1007/s10915-022-02055-8)
+"""
 struct SourceResidualViscosityTominec{Cache}
     cache::Cache
 
