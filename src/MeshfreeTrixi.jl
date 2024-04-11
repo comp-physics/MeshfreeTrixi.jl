@@ -170,7 +170,7 @@ export concrete_rbf_flux_basis, concrete_poly_flux_basis, compute_flux_operator
 export RefPointData, Point1D, Point2D, Point3D,
        PointCloudBasis, PolyharmonicSpline, RBF
 
-export HistoryCallback, InfoCallback, SolutionSavingCallback
+export HistoryCallback, InfoCallback, SolutionSavingCallback, PerformanceCallback
 
 export SourceTerms, SourceHyperviscosityFlyer, SourceHyperviscosityTominec,
        SourceUpwindViscosityTominec,

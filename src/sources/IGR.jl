@@ -178,7 +178,7 @@ function update_sigma!(sigma, du, u,
 
     # Perform iterative solve here
     # Make solver a passable parameter
-    linear_solver(sigma, lhs_operator, igr_rhs; maxiter=10)
+    linear_solver(sigma, lhs_operator, igr_rhs; maxiter=20)
 end
 
 # Calculate 2D flux for a single point
