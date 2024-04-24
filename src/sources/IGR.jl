@@ -27,15 +27,15 @@ SourceIGR(solver, equations, domain)
 
 Construct an Information Geometric Regularization source for an RBF-FD discretization.
 """
-function SourceIGR(solver, equations, domain; alpha=1.0, linear_solver=cg)
+function SourceIGR(solver, equations, domain; alpha = 1.0, linear_solver = cg)
     cache = (; create_igr_cache(solver, equations, domain, alpha, linear_solver)...)
 
     SourceIGR{typeof(cache)}(cache)
 end
 
 struct IGRCompositeMatrix{T}
-    Dx::SparseMatrixCSC{T,Int}
-    Dy::SparseMatrixCSC{T,Int}
+    Dx::SparseMatrixCSC{T, Int}
+    Dy::SparseMatrixCSC{T, Int}
     rho_inv::Vector{T}
     alpha::T # 20(∆x)2 but passed in for now
     tmp1::Vector{T}
@@ -52,7 +52,7 @@ function *(A::IGRCompositeMatrix{T}, v::AbstractVector{T}) where {T}
     return A.rho_inv .* v - A.alpha * (Dx_rho_inv_Dx_v + Dy_rho_inv_Dy_v)
 end
 function mul!(y::AbstractVector{T}, A::IGRCompositeMatrix{T},
-    v::AbstractVector{T}) where {T}
+              v::AbstractVector{T}) where {T}
     # Use tmp1 for Dx_v and Dy_v
     mul!(A.tmp1, A.Dx, v)  # Dx_v in-place
     mul!(A.tmp2, A.Dy, v)  # Dy_v in-place
@@ -72,7 +72,7 @@ Base.size(A::IGRCompositeMatrix, dim::Int) = size(A.Dx, dim)
 Base.size(A::IGRCompositeMatrix) = (size(A.Dx, 1), size(A.Dx, 2))
 
 function create_igr_cache(solver::PointCloudSolver, equations,
-    domain::PointCloudDomain, alpha, linear_solver)
+                          domain::PointCloudDomain, alpha, linear_solver)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -107,16 +107,16 @@ function create_igr_cache(solver::PointCloudSolver, equations,
     tmp3 = zeros(uEltype, pd.num_points)
     differentiation_matrices = compute_flux_operator(solver, domain, 1)
     lhs_operator = IGRCompositeMatrix(differentiation_matrices[1],
-        differentiation_matrices[2],
-        rho_inv, alpha, tmp1, tmp2, tmp3)
+                                      differentiation_matrices[2],
+                                      rho_inv, alpha, tmp1, tmp2, tmp3)
 
     return (; sigma, rho_inv, igr_rhs, flux_x, flux_y, trace, trace_squared, alpha,
-        lhs_operator, linear_solver)
+            lhs_operator, linear_solver)
 end
 
 function update_igr_rhs!(du, u,
-    equations::CompressibleEulerEquations2D, domain, cache,
-    semi_cache)
+                         equations::CompressibleEulerEquations2D, domain, cache,
+                         semi_cache)
     # Calculate α(tr([Du])² + tr([Du]²))
     @unpack sigma, flux_x, flux_y, igr_rhs, trace, trace_squared, alpha, lhs_operator = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded, rbf_differentiation_matrices = semi_cache
@@ -132,9 +132,9 @@ function update_igr_rhs!(du, u,
     end
 
     apply_to_each_field(mul_by!(rbf_differentiation_matrices[1]),
-        flux_x, u_prim)
+                        flux_x, u_prim)
     apply_to_each_field(mul_by!(rbf_differentiation_matrices[2]),
-        flux_y, u_prim)
+                        flux_y, u_prim)
 
     # Calculate α(tr([Du])² + tr([Du]²))
     # TODO: Improve allocations
@@ -159,8 +159,8 @@ function update_igr_rhs!(du, u,
 end
 
 function update_sigma!(sigma, du, u,
-    equations::CompressibleEulerEquations2D, domain, cache,
-    semi_cache)
+                       equations::CompressibleEulerEquations2D, domain, cache,
+                       semi_cache)
     # Solve (ρ⁻¹ - α (Dx ρ⁻¹ Dx + Dy ρ⁻¹ Dy)) Σ = α(tr([Du])² + tr([Du]²))
     @unpack sigma, trace, trace_squared, alpha, lhs_operator, igr_rhs, linear_solver = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
@@ -178,11 +178,12 @@ function update_sigma!(sigma, du, u,
 
     # Perform iterative solve here
     # Make solver a passable parameter
-    linear_solver(sigma, lhs_operator, igr_rhs; maxiter=20)
+    linear_solver(sigma, lhs_operator, igr_rhs; maxiter = 20)
 end
 
 # Calculate 2D flux for a single point
-@inline function flux_igr(sigma, orientation::Integer, equations::CompressibleEulerEquations2D)
+@inline function flux_igr(sigma, orientation::Integer,
+                          equations::CompressibleEulerEquations2D)
     if orientation == 1
         f1 = 0.0
         f2 = sigma
@@ -198,7 +199,7 @@ end
 end
 
 function (source::SourceIGR)(du, u, t, domain, equations,
-    solver::PointCloudSolver, semi_cache)
+                             solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
     @unpack sigma, trace, trace_squared, alpha, lhs_operator = source.cache
@@ -223,8 +224,8 @@ function (source::SourceIGR)(du, u, t, domain, equations,
             flux_values[e] = flux_igr(sigma[e], i, equations)
         end
         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[i],
-                -1),
-            du, flux_values)
+                                          -1),
+                            du, flux_values)
     end
     # du .+= local_rhs
 end
