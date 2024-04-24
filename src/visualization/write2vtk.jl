@@ -262,9 +262,9 @@ end
 function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi;
                     write_meta_data = true)
     # Export conservative variables
-    vtk["density"] = getindex.(u, 1)
-    vtk["density_energy"] = getindex.(u, 4)
-    vtk["momentum"] = vcat(getindex.(u, 2)', getindex.(u, 3)')
+    vtk["density"] = get_component(u, 1)
+    vtk["density_energy"] = get_component(u, 4)
+    vtk["momentum"] = vcat(get_component(u, 2)', get_component(u, 3)')
     # vtk["density"] = [particle_density(u, system, particle)
     #                   for particle in eachparticle(system)]
     # vtk["pressure"] = [particle_pressure(u, system, particle)
@@ -275,8 +275,8 @@ function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi;
     for i in eachindex(u_prim)
         u_prim[i] = cons2prim(u[i], system)
     end
-    vtk["pressure"] = getindex.(u_prim, 4)
-    vtk["velocity"] = vcat(getindex.(u_prim, 2)', getindex.(u_prim, 3)')
+    vtk["pressure"] = get_component(u_prim, 4)
+    vtk["velocity"] = vcat(get_component(u_prim, 2)', get_component(u_prim, 3)')
 
     # if write_meta_data
     #     vtk["acceleration"] = system.acceleration

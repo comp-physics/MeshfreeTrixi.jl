@@ -1,3 +1,4 @@
+# Based on Trixi/src/callbacks_stage/positivity_zhang_shu.jl
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -10,7 +11,10 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
                                   solver::PointCloudSolver, cache)
     # @unpack weights = solver.basis
     local_u = cache.local_values_threaded[1]
+    u_mean = cache.rhs_local_threaded[1]
     set_to_zero!(local_u)
+    set_to_zero!(u_mean)
+    zero_el = SVector(zeros(eltype(u[1]), nvariables(equations))...)
 
     # @threaded for element in eachelement(solver, cache)
     for element in eachindex(u)
@@ -31,11 +35,11 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
         value_min < threshold || continue
 
         # compute mean value
-        u_mean = SVector(zeros(eltype(u[element]), nvariables(equations))...)
+        # u_mean = SVector(zeros(eltype(u[element]), nvariables(equations))...)
         for i in domain.pd.neighbors[element]
-            u_mean += u[i]
+            u_mean[element] += u[i]
         end
-        u_mean = u_mean / domain.pd.num_neighbors
+        u_mean[element] = u_mean[element] / domain.pd.num_neighbors
         # for j in eachnode(solver), i in eachnode(solver)
         #     u_node = get_node_vars(u, equations, solver, i, j, element)
         #     u_mean += u_node * weights[i] * weights[j]
@@ -45,9 +49,9 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
 
         # We compute the value directly with the mean values, as we assume that
         # Jensen's inequality holds (e.g. pressure for compressible Euler equations).
-        value_mean = variable(u_mean, equations)
+        value_mean = variable(u_mean[element], equations)
         theta = (value_mean - threshold) / (value_mean - value_min)
-        local_u[element] = theta * u[element] + (1 - theta) * u_mean
+        local_u[element] = theta * u[element] + (1 - theta) * u_mean[element]
         # for j in eachnode(solver), i in eachnode(solver)
         #     u_node = get_node_vars(u, equations, solver, i, j, element)
         #     set_node_vars!(u, theta * u_node + (1 - theta) * u_mean,
@@ -55,7 +59,6 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
         # end
     end
 
-    zero_el = SVector(zeros(eltype(u[1]), nvariables(equations))...)
     for element in eachindex(u)
         if local_u[element] != zero_el
             u[element] = local_u[element]

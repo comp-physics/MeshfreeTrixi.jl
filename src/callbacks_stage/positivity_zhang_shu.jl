@@ -1,3 +1,4 @@
+# Based on Trixi/src/callbacks_stage/positivity_zhang_shu.jl
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.

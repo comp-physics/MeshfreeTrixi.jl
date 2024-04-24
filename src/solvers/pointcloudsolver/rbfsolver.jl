@@ -79,6 +79,9 @@ end
 # iteration over quantities in a single element
 @inline nnodes(basis::RefPointData) = basis.nv # synonymous for number of neighbors
 
+get_component(u::StructArray, i::Int) = StructArrays.component(u, i)
+get_component(u::AbstractArray{<:SVector}, i::Int) = getindex.(u, i)
+
 # """
 #     each_face_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 

@@ -43,8 +43,8 @@ evaluating the computational performance, such as the total runtime, the perform
 (time/DOF/rhs!), the time spent in garbage collection (GC), or the current memory usage (alloc'd
 memory).
 """
-mutable struct PerformanceCallback{Analyzer,AnalysisIntegrals,InitialStateIntegrals,
-    Cache}
+mutable struct PerformanceCallback{Analyzer, AnalysisIntegrals, InitialStateIntegrals,
+                                   Cache}
     start_time::Float64
     start_time_last_analysis::Float64
     ncalls_rhs_last_analysis::Int
@@ -64,7 +64,7 @@ end
 # function Base.show(io::IO, performance_callback::PerformanceCallback)
 # end
 function Base.show(io::IO, ::MIME"text/plain",
-    cb::DiscreteCallback{<:Any,<:PerformanceCallback})
+                   cb::DiscreteCallback{<:Any, <:PerformanceCallback})
     @nospecialize cb # reduce precompilation time
 
     if get(io, :compact, false)
@@ -72,8 +72,8 @@ function Base.show(io::IO, ::MIME"text/plain",
     else
         performance_callback = cb.affect!
 
-        setup = Pair{String,Any}["interval"=>performance_callback.interval,
-            "analyzer"=>performance_callback.analyzer]
+        setup = Pair{String, Any}["interval" => performance_callback.interval,
+                                  "analyzer" => performance_callback.analyzer]
         for (idx, error) in enumerate(performance_callback.analysis_errors)
             push!(setup, "│ error " * string(idx) => error)
         end
@@ -81,12 +81,12 @@ function Base.show(io::IO, ::MIME"text/plain",
             push!(setup, "│ integral " * string(idx) => integral)
         end
         push!(setup,
-            "save analysis to file" => performance_callback.save_analysis ? "yes" :
-                                       "no")
+              "save analysis to file" => performance_callback.save_analysis ? "yes" :
+                                         "no")
         if performance_callback.save_analysis
             push!(setup, "│ filename" => performance_callback.analysis_filename)
             push!(setup,
-                "│ output directory" => abspath(normpath(performance_callback.output_directory)))
+                  "│ output directory" => abspath(normpath(performance_callback.output_directory)))
         end
         summary_box(io, "PerformanceCallback", setup)
     end
@@ -100,17 +100,17 @@ end
 
 # This is the actual constructor
 function PerformanceCallback(mesh, equations::Trixi.AbstractEquations, solver, cache;
-    interval=0,
-    save_analysis=false,
-    output_directory="out",
-    analysis_filename="analysis.dat",
-    extra_analysis_errors=Symbol[],
-    analysis_errors=Symbol[],
-    extra_analysis_integrals=(),
-    analysis_integrals=Symbol[],
-    RealT=real(solver),
-    uEltype=eltype(cache.elements),
-    kwargs...)
+                             interval = 0,
+                             save_analysis = false,
+                             output_directory = "out",
+                             analysis_filename = "analysis.dat",
+                             extra_analysis_errors = Symbol[],
+                             analysis_errors = Symbol[],
+                             extra_analysis_integrals = (),
+                             analysis_integrals = Symbol[],
+                             RealT = real(solver),
+                             uEltype = eltype(cache.elements),
+                             kwargs...)
     # Decide when the callback is activated.
     # With error-based step size control, some steps can be rejected. Thus,
     #   `integrator.iter >= integrator.stats.naccept`
@@ -124,27 +124,27 @@ function PerformanceCallback(mesh, equations::Trixi.AbstractEquations, solver, c
 
     analyzer = SolutionAnalyzer(solver; kwargs...)
     cache_analysis = create_cache_analysis(analyzer, mesh, equations, solver, cache,
-        RealT, uEltype)
+                                           RealT, uEltype)
 
     performance_callback = PerformanceCallback(0.0, 0.0, 0, 0.0,
-        interval, save_analysis,
-        output_directory,
-        analysis_filename,
-        analyzer,
-        analysis_errors,
-        Tuple(analysis_integrals),
-        SVector(ntuple(_ -> zero(uEltype),
-            Val(nvariables(equations)))),
-        cache_analysis)
+                                               interval, save_analysis,
+                                               output_directory,
+                                               analysis_filename,
+                                               analyzer,
+                                               analysis_errors,
+                                               Tuple(analysis_integrals),
+                                               SVector(ntuple(_ -> zero(uEltype),
+                                                              Val(nvariables(equations)))),
+                                               cache_analysis)
 
     DiscreteCallback(condition, performance_callback,
-        save_positions=(false, false),
-        initialize=initialize!)
+                     save_positions = (false, false),
+                     initialize = initialize!)
 end
 
 # This method gets called from OrdinaryDiffEq's `solve(...)`
-function initialize!(cb::DiscreteCallback{Condition,Affect!}, u_ode, t,
-    integrator) where {Condition,Affect!<:PerformanceCallback}
+function initialize!(cb::DiscreteCallback{Condition, Affect!}, u_ode, t,
+                     integrator) where {Condition, Affect! <: PerformanceCallback}
     semi = integrator.p
     du_ode = first(get_tmp_cache(integrator))
     initialize!(cb, u_ode, du_ode, t, integrator, semi)
@@ -152,8 +152,8 @@ end
 
 # This is the actual initialization method
 # Note: we have this indirection to allow initializing a callback from the PerformanceCallbackCoupled
-function initialize!(cb::DiscreteCallback{Condition,Affect!}, u_ode, du_ode, t,
-    integrator, semi) where {Condition,Affect!<:PerformanceCallback}
+function initialize!(cb::DiscreteCallback{Condition, Affect!}, u_ode, du_ode, t,
+                     integrator, semi) where {Condition, Affect! <: PerformanceCallback}
     # initial_state_integrals = integrate(u_ode, semi)
     _, equations, _, _ = Trixi.mesh_equations_solver_cache(semi)
 
@@ -218,7 +218,7 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
 
     # Record performance measurements and compute performance index (PID)
     runtime_since_last_analysis = 1.0e-9 * (time_ns() -
-                                            performance_callback.start_time_last_analysis)
+                                   performance_callback.start_time_last_analysis)
     # PID is an MPI-aware measure of how much time per global degree of freedom (i.e., over all ranks)
     # and per `rhs!` evaluation is required. MPI-aware means that it essentially adds up the time
     # spent on each MPI rank. Thus, in an ideally parallelized program, the PID should be constant
@@ -270,7 +270,7 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
         println()
         println("─"^100)
         println(" Simulation running '", Trixi.get_name(equations), "' with ",
-            summary(solver))
+                summary(solver))
         println("─"^100)
         println(" #timesteps:     " * @sprintf("% 14d", iter) *
                 "               " *
@@ -298,7 +298,7 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
         # Open file for appending and store time step and time information
         if performance_callback.save_analysis
             io = open(joinpath(performance_callback.output_directory,
-                    performance_callback.analysis_filename), "a")
+                               performance_callback.analysis_filename), "a")
             @printf(io, "% 9d", iter)
             @printf(io, "  %10.8e", t)
             @printf(io, "  %10.8e", dt)
@@ -319,6 +319,8 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
 
         println("─"^100)
         println()
+
+        flush(stdout)
 
         # Add line break and close analysis file if it was opened
         if performance_callback.save_analysis
@@ -341,9 +343,9 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
 end
 
 # used for error checks and EOC analysis
-function (cb::DiscreteCallback{Condition,Affect!})(sol) where {Condition,
-    Affect!<:
-    AnalysisCallback}
+function (cb::DiscreteCallback{Condition, Affect!})(sol) where {Condition,
+                                                                Affect! <:
+                                                                AnalysisCallback}
     analysis_callback = cb.affect!
     semi = sol.prob.p
     @unpack analyzer = analysis_callback
@@ -517,12 +519,12 @@ end
 # pretty_form_ascii(::typeof(lake_at_rest_error)) = "|H0-(h+b)|"
 
 # specialized implementations specific to some solvers
-# PointCloudDomain
-get_component(u::StructArray, i::Int) = StructArrays.component(u, i)
-get_component(u::AbstractArray{<:SVector}, i::Int) = getindex.(u, i)
+# PointCloudDomain (move later)
+# get_component(u::StructArray, i::Int) = StructArrays.component(u, i)
+# get_component(u::AbstractArray{<:SVector}, i::Int) = getindex.(u, i)
 function create_cache_analysis(analyzer, mesh::PointCloudDomain,
-    equations, solver::PointCloudSolver, cache,
-    RealT, uEltype)
+                               equations, solver::PointCloudSolver, cache,
+                               RealT, uEltype)
     # md = mesh.md
     return (;)
 end
