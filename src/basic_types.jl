@@ -14,7 +14,7 @@ abstract type AbstractSemidiscretization end
 """
     AbstractDomain{NDIMS}
 
-An abstract supertype of specific mesh types such as `TreeMesh` or `StructuredMesh`.
+An abstract supertype of specific domain types such as `PointCloudDomain`.
 The type parameters encode the number of spatial dimensions (`NDIMS`).
 """
 abstract type AbstractDomain{NDIMS} end

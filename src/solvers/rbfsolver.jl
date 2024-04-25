@@ -24,19 +24,11 @@ standard textbooks. Replaces VolumeIntegralWeakForm()
 
 ## References
 
-- Kopriva (2009)
-  Implementing Spectral Methods for Partial Differential Equations:
-  Algorithms for Scientists and Engineers
-  [doi: 10.1007/978-90-481-2261-5](https://doi.org/10.1007/978-90-481-2261-5)
-- Hesthaven, Warburton (2007)
-  Nodal Discontinuous Galerkin Methods: Algorithms, Analysis, and
-  Applications
-  [doi: 10.1007/978-0-387-72067-8](https://doi.org/10.1007/978-0-387-72067-8)
+- Flyer, Natasha (2016)
+  Enhancing Finite Difference Methods with Radial Basis Functions:
+  Experiments on the Navier-Stokes Equations
+  [doi: 10.1016/j.jcp.2016.02.078](https://doi.org/10.1016/j.jcp.2016.02.078)
 
-`RBFFDEngine()` is only implemented for conserved terms as
-non-conservative terms should always be discretized in conjunction with a flux-splitting scheme,
-see [`VolumeIntegralFluxDifferencing`](@ref).
-This treatment is required to achieve, e.g., entropy-stability or well-balancedness.
 """
 struct RBFFDEngine <: AbstractRBFEngine end
 
@@ -66,11 +58,9 @@ struct RBFFDEngine <: AbstractRBFEngine end
 
 create_cache(mesh, equations, ::RBFFDEngine, solver, uEltype) = NamedTuple()
 """
-    RBFSolver(; basis, mortar, surface_integral, engine)
+    RBFSolver(; basis, engine)
 
-Create a discontinuous Galerkin method.
-If [`basis isa LobattoLegendreBasis`](@ref LobattoLegendreBasis),
-this creates a [`RBFSolverSEM`](@ref).
+Create an RBF-FD method.
 """
 struct RBFSolver{Basis, RBFEngine}
     basis::Basis
@@ -131,7 +121,9 @@ end
 #     nelements(cache.elements) * nnodes(solver)^ndims(domain)
 # end
 
-# TODO: Taal performance, 1:nnodes(solver) vs. Base.OneTo(nnodes(solver)) vs. SOneTo(nnodes(solver)) for RBFSolverSEM
+# TODO: Generic methods below need cleanup. Most are unused or specialized in PointCloudSolver 
+# We would only want generic methods for fallback between point based solvers and 
+# cell based solvers.
 """
     eachnode(solver::RBFSolver)
 

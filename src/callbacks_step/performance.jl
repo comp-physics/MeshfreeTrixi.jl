@@ -1,3 +1,4 @@
+# Based on AnalysiCallback. We only keep the timing and memory usage information.
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -203,7 +204,7 @@ function (performance_callback::PerformanceCallback)(integrator)
     performance_callback(u_ode, du_ode, integrator, semi)
 end
 
-# This method gets called internally as the main entry point to the AnalysiCallback
+# This method gets called internally as the main entry point to the PerformanceCallback
 # TODO: Taal refactor, allow passing an IO object (which could be devnull to avoid cluttering the console)
 function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, semi)
     mesh, equations, solver, cache = Trixi.mesh_equations_solver_cache(semi)
@@ -345,7 +346,7 @@ end
 # used for error checks and EOC analysis
 function (cb::DiscreteCallback{Condition, Affect!})(sol) where {Condition,
                                                                 Affect! <:
-                                                                AnalysisCallback}
+                                                                PerformanceCallback}
     analysis_callback = cb.affect!
     semi = sol.prob.p
     @unpack analyzer = analysis_callback
@@ -355,168 +356,6 @@ function (cb::DiscreteCallback{Condition, Affect!})(sol) where {Condition,
     # cache_analysis)
     # (; l2 = l2_error, linf = linf_error)
 end
-
-# This method is just called internally from `(performance_callback::PerformanceCallback)(integrator)`
-# and serves as a function barrier. Additionally, it makes the code easier to profile and optimize.
-# function (performance_callback::PerformanceCallback)(io, du, u, u_ode, t, semi)
-#     # We only care about the timings 
-#     # @unpack analyzer, analysis_errors, analysis_integrals = performance_callback
-#     # cache_analysis = performance_callback.cache
-#     # _, equations, _, _ = mesh_equations_solver_cache(semi)
-
-#     # # Calculate and print derived quantities (error norms, entropy etc.)
-#     # # Variable names required for L2 error, Linf error, and conservation error
-#     # if any(q in analysis_errors
-#     #        for q in (:l2_error, :linf_error, :conservation_error, :residual)) &&
-#     #    mpi_isroot()
-#     #     print(" Variable:    ")
-#     #     for v in eachvariable(equations)
-#     #         @printf("   %-14s", varnames(cons2cons, equations)[v])
-#     #     end
-#     #     println()
-#     # end
-
-#     # if :l2_error in analysis_errors || :linf_error in analysis_errors
-#     #     # Calculate L2/Linf errors
-#     #     l2_error, linf_error = calc_error_norms(u_ode, t, analyzer, semi,
-#     #                                             cache_analysis)
-
-#     #     if mpi_isroot()
-#     #         # L2 error
-#     #         if :l2_error in analysis_errors
-#     #             print(" L2 error:    ")
-#     #             for v in eachvariable(equations)
-#     #                 @printf("  % 10.8e", l2_error[v])
-#     #                 @printf(io, "  % 10.8e", l2_error[v])
-#     #             end
-#     #             println()
-#     #         end
-
-#     #         # Linf error
-#     #         if :linf_error in analysis_errors
-#     #             print(" Linf error:  ")
-#     #             for v in eachvariable(equations)
-#     #                 @printf("  % 10.8e", linf_error[v])
-#     #                 @printf(io, "  % 10.8e", linf_error[v])
-#     #             end
-#     #             println()
-#     #         end
-#     #     end
-#     # end
-
-#     # # Conservation error
-#     # if :conservation_error in analysis_errors
-#     #     @unpack initial_state_integrals = performance_callback
-#     #     state_integrals = integrate(u_ode, semi)
-
-#     #     if mpi_isroot()
-#     #         print(" |∑U - ∑U₀|:  ")
-#     #         for v in eachvariable(equations)
-#     #             err = abs(state_integrals[v] - initial_state_integrals[v])
-#     #             @printf("  % 10.8e", err)
-#     #             @printf(io, "  % 10.8e", err)
-#     #         end
-#     #         println()
-#     #     end
-#     # end
-
-#     # # Residual (defined here as the vector maximum of the absolute values of the time derivatives)
-#     # if :residual in analysis_errors
-#     #     mpi_print(" max(|Uₜ|):   ")
-#     #     for v in eachvariable(equations)
-#     #         # Calculate maximum absolute value of Uₜ
-#     #         res = maximum(abs, view(du, v, ..))
-#     #         if mpi_isparallel()
-#     #             # TODO: Debugging, here is a type instability
-#     #             global_res = MPI.Reduce!(Ref(res), max, mpi_root(), mpi_comm())
-#     #             if mpi_isroot()
-#     #                 res::eltype(du) = global_res[]
-#     #             end
-#     #         end
-#     #         if mpi_isroot()
-#     #             @printf("  % 10.8e", res)
-#     #             @printf(io, "  % 10.8e", res)
-#     #         end
-#     #     end
-#     #     println()
-#     # end
-
-#     # # L2/L∞ errors of the primitive variables
-#     # if :l2_error_primitive in analysis_errors ||
-#     #    :linf_error_primitive in analysis_errors
-#     #     l2_error_prim, linf_error_prim = calc_error_norms(cons2prim, u_ode, t, analyzer,
-#     #                                                       semi, cache_analysis)
-
-#     #     if mpi_isroot()
-#     #         print(" Variable:    ")
-#     #         for v in eachvariable(equations)
-#     #             @printf("   %-14s", varnames(cons2prim, equations)[v])
-#     #         end
-#     #         println()
-
-#     #         # L2 error
-#     #         if :l2_error_primitive in analysis_errors
-#     #             print(" L2 error prim.: ")
-#     #             for v in eachvariable(equations)
-#     #                 @printf("%10.8e   ", l2_error_prim[v])
-#     #                 @printf(io, "  % 10.8e", l2_error_prim[v])
-#     #             end
-#     #             println()
-#     #         end
-
-#     #         # L∞ error
-#     #         if :linf_error_primitive in analysis_errors
-#     #             print(" Linf error pri.:")
-#     #             for v in eachvariable(equations)
-#     #                 @printf("%10.8e   ", linf_error_prim[v])
-#     #                 @printf(io, "  % 10.8e", linf_error_prim[v])
-#     #             end
-#     #             println()
-#     #         end
-#     #     end
-#     # end
-
-#     # # additional integrals
-#     # analyze_integrals(analysis_integrals, io, du, u, t, semi)
-
-#     return nothing
-# end
-
-# function entropy_timederivative end
-# pretty_form_utf(::typeof(entropy_timederivative)) = "∑∂S/∂U ⋅ Uₜ"
-# pretty_form_ascii(::typeof(entropy_timederivative)) = "dsdu_ut"
-
-# pretty_form_utf(::typeof(entropy)) = "∑S"
-
-# pretty_form_utf(::typeof(energy_total)) = "∑e_total"
-# pretty_form_ascii(::typeof(energy_total)) = "e_total"
-
-# pretty_form_utf(::typeof(energy_kinetic)) = "∑e_kinetic"
-# pretty_form_ascii(::typeof(energy_kinetic)) = "e_kinetic"
-
-# pretty_form_utf(::typeof(energy_kinetic_nondimensional)) = "∑e_kinetic*"
-# pretty_form_ascii(::typeof(energy_kinetic_nondimensional)) = "e_kinetic*"
-
-# pretty_form_utf(::typeof(energy_internal)) = "∑e_internal"
-# pretty_form_ascii(::typeof(energy_internal)) = "e_internal"
-
-# pretty_form_utf(::typeof(energy_magnetic)) = "∑e_magnetic"
-# pretty_form_ascii(::typeof(energy_magnetic)) = "e_magnetic"
-
-# pretty_form_utf(::typeof(cross_helicity)) = "∑v⋅B"
-# pretty_form_ascii(::typeof(cross_helicity)) = "v_dot_B"
-
-# pretty_form_utf(::typeof(enstrophy)) = "∑enstrophy"
-# pretty_form_ascii(::typeof(enstrophy)) = "enstrophy"
-
-# pretty_form_utf(::Val{:l2_divb}) = "L2 ∇⋅B"
-# pretty_form_ascii(::Val{:l2_divb}) = "l2_divb"
-
-# pretty_form_utf(::Val{:linf_divb}) = "L∞ ∇⋅B"
-# pretty_form_ascii(::Val{:linf_divb}) = "linf_divb"
-
-# pretty_form_utf(::typeof(lake_at_rest_error)) = "∑|H₀-(h+b)|"
-# pretty_form_ascii(::typeof(lake_at_rest_error)) = "|H0-(h+b)|"
 
 # specialized implementations specific to some solvers
 # PointCloudDomain (move later)

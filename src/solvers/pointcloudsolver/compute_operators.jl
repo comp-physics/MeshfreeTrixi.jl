@@ -1,3 +1,11 @@
+"""
+    concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}; k::Int) where {NDIMS}
+
+Create a concrete RBF basis of compiled functions for the given RBF and basis.
+Returns a NamedTuple with the compiled functions for the RBF and its first derivative.
+If executed with a specific derivative order `k`, the function will return the 
+k-th derivative of the RBF.
+"""
 function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}) where {NDIMS}
     if NDIMS == 1
         @variables x
@@ -25,9 +33,9 @@ function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}) where {NDIMS}
         rbf_y = simplify(expand_derivatives(Dy(rbf)))
         rbf_z = simplify(expand_derivatives(Dz(rbf)))
         rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
-        rbf_x_expr = build_function(rbf_x, [x, y]; expression = Val{false})
-        rbf_y_expr = build_function(rbf_y, [x, y]; expression = Val{false})
-        rbf_z_expr = build_function(rbf_z, [x, y]; expression = Val{false})
+        rbf_x_expr = build_function(rbf_x, [x, y, z]; expression = Val{false})
+        rbf_y_expr = build_function(rbf_y, [x, y, z]; expression = Val{false})
+        rbf_z_expr = build_function(rbf_z, [x, y, z]; expression = Val{false})
         return (; rbf_expr, rbf_x_expr, rbf_y_expr, rbf_z_expr)
     end
 end
@@ -73,6 +81,14 @@ function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}, k::Int) where 
     end
 end
 
+"""
+    concrete_poly_flux_basis(rbf, basis::RefPointData{NDIMS}; k::Int) where {NDIMS}
+
+Create a concrete Polynomial basis of compiled functions for the given RBF and basis.
+Returns a NamedTuple with the compiled functions for all monomials and its first derivative.
+If executed with a specific derivative order `k`, the function will return the 
+k-th derivative of the monomials.
+"""
 function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS}
     if NDIMS == 1
         # @polyvar x # diff wrt existing vars, new polyvar doesn't work
@@ -166,15 +182,14 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) wher
     end
 end
 
+"""
+    rbf_block(rbf_expr, basis::RefPointData{NDIMS},
+        X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
+
+Generate RBF Matrix for one interpolation point.
+"""
 function rbf_block(rbf_expr, basis::RefPointData{NDIMS},
                    X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
-    # Generate RBF Matrix for one interpolation point
-    #
-    # Inputs:   rbf_expr - RBF Function
-    #           X - Input Point Set
-    #
-    # Outputs:  Φ - RBF Matrix Block
-
     m = lastindex(X)
     D = Array{SVector{NDIMS, T}, 2}(undef, m, m)
 
@@ -187,16 +202,14 @@ function rbf_block(rbf_expr, basis::RefPointData{NDIMS},
     return rbf_expr.(D)
 end
 
+"""
+    poly_block(poly_func, basis::RefPointData{NDIMS},
+        X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
+
+Generate Polynomial Matrix across all interpolation points.
+"""
 function poly_block(poly_func, basis::RefPointData{NDIMS},
                     X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
-    # Generate the polynomial basis block for one
-    #  interpolation point
-    #
-    # Inputs:   F - StaticPolynomial Array
-    #           X - Input Point Set
-    #
-    # Outputs:  P - Monomial Basis Block
-
     n = length(poly_func)
     m = lastindex(X)
 
@@ -236,6 +249,11 @@ function interpolation_block(R::Matrix, P::Matrix)
     Symmetric(hvcat((2, 2), R, P, P', zeros(size(P)[2], size(P)[2])))
 end
 
+"""
+    poly_linearoperator(X::SVector{NDIMS, T}, poly_func::NamedTuple) where {T}
+
+Generate RHS Polynomials terms corresponding to linear operators applied to polynomials.
+"""
 function poly_linearoperator(X::SVector{1, T}, poly_func::NamedTuple) where {T}
     # Generate RHS Corresponding to Linear Operators on RBF System
     @unpack poly_expr, poly_x_expr = poly_func
@@ -288,6 +306,11 @@ end
 #     return (; r_F, r_Fx, r_Fy, r_Fz)
 # end
 
+"""
+    rbf_linearoperator(X::SVector{NDIMS, T}, poly_func::NamedTuple) where {T}
+
+Generate RHS RBF terms corresponding to linear operators applied to RBFs.
+"""
 function rbf_linearoperator(X::Vector{SVector{1, T}}, rbf_func::NamedTuple) where {T}
     # Generate RHS Corresponding to Linear Operators on RBF System
     @unpack rbf_expr, rbf_x_expr = rbf_func
@@ -348,7 +371,24 @@ function assemble_rhs(rbf_rhs::NamedTuple, poly_rhs::NamedTuple, basis::RefPoint
             poly_rhs.r_Fx poly_rhs.r_Fy poly_rhs.r_Fz poly_rhs.r_F]
 end
 
-# Port of generator_operator from RBFD to generate Dx and Dy flux operators
+# Port of generator_operator from RadialBasisFiniteDifferences to 
+# generate flux operators
+"""
+    compute_flux_operator(solver::RBFSolver,
+        domain::PointCloudDomain{NDIMS}; k::Int)
+
+Calculate global RBF-FD operator matrix for the given RBF and basis.
+This formulation directly collocates interpolation and evaluation points.
+Returns an array of sparse matrices for the flux derivatives in each
+{NDIMS} direction. If executed with a specific derivative order `k`, 
+the function will return the k-th derivative operator.
+## References
+
+- Flyer, Natasha (2016)
+  Enhancing Finite Difference Methods with Radial Basis Functions:
+  Experiments on the Navier-Stokes Equations
+  [doi: 10.1016/j.jcp.2016.02.078](https://doi.org/10.1016/j.jcp.2016.02.078)
+"""
 function compute_flux_operator(solver::RBFSolver,
                                domain::PointCloudDomain{2})
     @unpack basis = solver

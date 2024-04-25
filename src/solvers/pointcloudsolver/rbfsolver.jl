@@ -1,4 +1,5 @@
 # Based on Trixi/src/solvers/DGMulti/dg.jl
+# Rewritten to work with RBF-FD methods on PointCloudDomains.
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -82,30 +83,6 @@ end
 get_component(u::StructArray, i::Int) = StructArrays.component(u, i)
 get_component(u::AbstractArray{<:SVector}, i::Int) = getindex.(u, i)
 
-# """
-#     each_face_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
-
-# Return an iterator over the indices that specify the location in relevant data structures
-# for the face nodes in `solver`.
-# In particular, not the face_nodes themselves are returned.
-# """
-# @inline function each_face_node(domain::PointCloudDomain, solver::PointCloudSolver,
-#                                 other_args...)
-#     Base.OneTo(solver.basis.Nfq)
-# end
-
-# """
-#     each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
-
-# Return an iterator over the indices that specify the location in relevant data structures
-# for the quadrature nodes in `solver`.
-# In particular, not the quadrature nodes themselves are returned.
-# """
-# @inline function each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver,
-#                                 other_args...)
-#     Base.OneTo(solver.basis.Nq)
-# end
-
 # # iteration over quantities over the entire domain (dofs, quad nodes, face nodes).
 # """
 #     each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
@@ -117,30 +94,6 @@ get_component(u::AbstractArray{<:SVector}, i::Int) = getindex.(u, i)
 # @inline function each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver,
 #                                  other_args...)
 #     Base.OneTo(ndofs(domain, solver, other_args...))
-# end
-
-# """
-#     each_quad_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
-
-# Return an iterator over the indices that specify the location in relevant data structures
-# for the global quadrature nodes in `domain`.
-# In particular, not the quadrature nodes themselves are returned.
-# """
-# @inline function each_quad_node_global(domain::PointCloudDomain,
-#                                        solver::PointCloudSolver, other_args...)
-#     Base.OneTo(solver.basis.Nq * domain.pd.num_elements)
-# end
-
-# """
-#     each_face_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
-
-# Return an iterator over the indices that specify the location in relevant data structures
-# for the face nodes in `domain`.
-# In particular, not the face nodes themselves are returned.
-# """
-# @inline function each_face_node_global(domain::PointCloudDomain,
-#                                        solver::PointCloudSolver, other_args...)
-#     Base.OneTo(solver.basis.Nfq * domain.pd.num_elements)
 # end
 
 # interface with semidiscretization_hyperbolic
@@ -180,17 +133,10 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
     rd = solver.basis
     pd = domain.pd
 
-    # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
-    # @unpack wq, Vq, M, Drst = rd
-
-    ### Replace with call to RBF-FD Engine for generating 
     # differentiation matrices as required by the governing equation
-    # rbf_differentiation_matrices = compute_flux_operators(domain, solver, equations)
     # This will compute diff_mat with two entries, the first being the dx,
     # and the second being dy. 
     rbf_differentiation_matrices = compute_flux_operator(solver, domain)
-    # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
-    # rbf_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
     nvars = nvariables(equations)
 
@@ -206,6 +152,7 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
                              for _ in 1:Threads.nthreads()]
 
     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
+    # We use these as scratch space instead
     flux_threaded = [[allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
     rhs_local_threaded = [allocate_nested_array(uEltype, nvars,
@@ -217,11 +164,6 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
             local_values_threaded, flux_threaded, rhs_local_threaded)
 end
 
-# used by semidiscretize(semi::AbstractSemidiscretization, tspan;
-# reset_threads = true)
-# May keep allocate_coefficients but make 
-# compute_coefficients a no-op
-# Corrections: compute_coefficients sets initial condition
 function Trixi.allocate_coefficients(domain::PointCloudDomain, equations,
                                      solver::PointCloudSolver, cache)
     return allocate_nested_array(real(solver), nvariables(equations),
@@ -236,79 +178,72 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     rd = solver.basis
     @unpack u_values = cache
 
-    # evaluate the initial condition at quadrature points
-    # @threaded for i in eachelement(domain, solver, cache)
     for i in eachelement(domain, solver, cache)
         u[i] = initial_condition(pd.points[i],
                                  t, equations)
     end
-
-    # multiplying by Pq computes the L2 projection
-    # Not doing projection for point cloud solver
-    # apply_to_each_field(mul_by!(I), u, u_values)
-    # recursivecopy!(u, u_values)
 end
 
+### All max stepsize callback functions need to be redefined 
+### to work with PointCloudSolver
 # estimates the timestep based on polynomial degree and domain. Does not account for physics (e.g.,
 # computes an estimate of `dt` based on the advection equation with constant unit advection speed).
-function estimate_dt(domain::PointCloudDomain, solver::PointCloudSolver)
-    rd = solver.basis # RefPointData
-    return StartUpDG.estimate_h(rd, domain.pd) / StartUpDG.inverse_trace_constant(rd)
-end
+# function estimate_dt(domain::PointCloudDomain, solver::PointCloudSolver)
+#     rd = solver.basis # RefPointData
+#     return StartUpDG.estimate_h(rd, domain.pd) / StartUpDG.inverse_trace_constant(rd)
+# end
 
-dt_polydeg_scaling(solver::PointCloudSolver) = inv(solver.basis.N + 1)
-function dt_polydeg_scaling(solver::PointCloudSolver{3, <:Wedge, <:TensorProductWedge})
-    inv(maximum(solver.basis.N) + 1)
-end
+# dt_polydeg_scaling(solver::PointCloudSolver) = inv(solver.basis.N + 1)
+# function dt_polydeg_scaling(solver::PointCloudSolver{3, <:Wedge, <:TensorProductWedge})
+#     inv(maximum(solver.basis.N) + 1)
+# end
 
-# for the stepsize callback
-function max_dt(u, t, domain::PointCloudDomain,
-                constant_speed::False, equations, solver::PointCloudSolver{NDIMS},
-                cache) where {NDIMS}
-    @unpack pd = domain
-    rd = solver.basis
+# # for the stepsize callback
+# function max_dt(u, t, domain::PointCloudDomain,
+#                 constant_speed::False, equations, solver::PointCloudSolver{NDIMS},
+#                 cache) where {NDIMS}
+#     @unpack pd = domain
+#     rd = solver.basis
 
-    dt_min = Inf
-    for e in eachelement(domain, solver, cache)
-        h_e = StartUpDG.estimate_h(e, rd, pd)
-        max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
-        for i in Base.OneTo(rd.Np) # loop over nodes
-            lambda_i = max_abs_speeds(u[i, e], equations)
-            max_speeds = max.(max_speeds, lambda_i)
-        end
-        dt_min = min(dt_min, h_e / sum(max_speeds))
-    end
-    # This mimics `max_dt` for `TreeMesh`, except that `nnodes(solver)` is replaced by
-    # `polydeg+1`. This is because `nnodes(solver)` returns the total number of
-    # multi-dimensional nodes for PointCloudSolver solver types, while `nnodes(solver)` returns
-    # the number of 1D nodes for `DGSEM` solvers.
-    return 2 * dt_min * dt_polydeg_scaling(solver)
-end
+#     dt_min = Inf
+#     for e in eachelement(domain, solver, cache)
+#         h_e = StartUpDG.estimate_h(e, rd, pd)
+#         max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
+#         for i in Base.OneTo(rd.Np) # loop over nodes
+#             lambda_i = max_abs_speeds(u[i, e], equations)
+#             max_speeds = max.(max_speeds, lambda_i)
+#         end
+#         dt_min = min(dt_min, h_e / sum(max_speeds))
+#     end
+#     # This mimics `max_dt` for `TreeMesh`, except that `nnodes(solver)` is replaced by
+#     # `polydeg+1`. This is because `nnodes(solver)` returns the total number of
+#     # multi-dimensional nodes for PointCloudSolver solver types, while `nnodes(solver)` returns
+#     # the number of 1D nodes for `DGSEM` solvers.
+#     return 2 * dt_min * dt_polydeg_scaling(solver)
+# end
 
-function max_dt(u, t, domain::PointCloudDomain,
-                constant_speed::True, equations, solver::PointCloudSolver{NDIMS},
-                cache) where {NDIMS}
-    @unpack pd = domain
-    rd = solver.basis
+# function max_dt(u, t, domain::PointCloudDomain,
+#                 constant_speed::True, equations, solver::PointCloudSolver{NDIMS},
+#                 cache) where {NDIMS}
+#     @unpack pd = domain
+#     rd = solver.basis
 
-    dt_min = Inf
-    for e in eachelement(domain, solver, cache)
-        h_e = StartUpDG.estimate_h(e, rd, pd)
-        max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
-        for i in Base.OneTo(rd.Np) # loop over nodes
-            max_speeds = max.(max_abs_speeds(equations), max_speeds)
-        end
-        dt_min = min(dt_min, h_e / sum(max_speeds))
-    end
-    # This mimics `max_dt` for `TreeMesh`, except that `nnodes(solver)` is replaced by
-    # `polydeg+1`. This is because `nnodes(solver)` returns the total number of
-    # multi-dimensional nodes for PointCloudSolver solver types, while `nnodes(solver)` returns
-    # the number of 1D nodes for `DGSEM` solvers.
-    return 2 * dt_min * dt_polydeg_scaling(solver)
-end
+#     dt_min = Inf
+#     for e in eachelement(domain, solver, cache)
+#         h_e = StartUpDG.estimate_h(e, rd, pd)
+#         max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
+#         for i in Base.OneTo(rd.Np) # loop over nodes
+#             max_speeds = max.(max_abs_speeds(equations), max_speeds)
+#         end
+#         dt_min = min(dt_min, h_e / sum(max_speeds))
+#     end
+#     # This mimics `max_dt` for `TreeMesh`, except that `nnodes(solver)` is replaced by
+#     # `polydeg+1`. This is because `nnodes(solver)` returns the total number of
+#     # multi-dimensional nodes for PointCloudSolver solver types, while `nnodes(solver)` returns
+#     # the number of 1D nodes for `DGSEM` solvers.
+#     return 2 * dt_min * dt_polydeg_scaling(solver)
+# end
 
-### Reimplement this to use our RBF-FD engine
-# # version for affine meshes
 function calc_fluxes!(du, u, domain::PointCloudDomain,
                       have_nonconservative_terms::False, equations,
                       engine::RBFFDEngine,
@@ -317,28 +252,8 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     rd = solver.basis
     pd = domain.pd
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded = cache
-    # @unpack rstxyzJ = pd # geometric terms
 
-    # Our elements correspond to each point
-    # but points do not have subelements 
-    # as such eachindex(flux_values) is the same 
-    # as e in eachelement(domain, solver, cache)
-    # Also need to determine if we should use
-    # u directly or u_values
-    #### CRITICAL: Does DG have divergence term in LHS?
-    # In other words, do we need to multiply the final flux term -1
-    # before adding to du?
     flux_values = local_values_threaded[1]
-    # for i in eachdim(domain)
-    #     for e in eachelement(domain, solver, cache)
-    #         flux_values[e] = flux(u[e], i, equations)
-    #     end
-    #     for j in eachdim(domain)
-    #         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
-    #                 -1),
-    #             du, flux_values)
-    #     end
-    # end
     for i in eachdim(domain)
         for e in eachelement(domain, solver, cache)
             flux_values[e] = flux(u[e], i, equations)
@@ -347,22 +262,6 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
                                           -1),
                             du, flux_values)
     end
-    # @threaded for e in eachelement(domain, solver, cache)
-    #     flux_values = local_values_threaded[Threads.threadid()]
-    #     for i in eachdim(domain)
-    #         # Here, the broadcasting operation does allocate
-    #         #flux_values .= flux.(view(u_values, :, e), i, equations)
-    #         # Use loop instead
-    #         for j in eachindex(flux_values)
-    #             flux_values[j] = flux(u_values[j, e], i, equations)
-    #         end
-    #         for j in eachdim(domain)
-    #             apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
-    #                                               dxidxhatj[i, j][1, e]),
-    #                                 view(du, :, e), flux_values)
-    #         end
-    #     end
-    # end
 end
 
 # do nothing for periodic (default) boundary conditions
@@ -393,8 +292,7 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
     rd = solver.basis
     pd = domain.pd
     @unpack u_face_values, flux_face_values, local_values_threaded = cache
-    # @unpack xyzf, nxyzJ, Jf = pd
-    # @unpack surface_flux = solver.surface_integral
+
     boundary_flux = local_values_threaded[1]
     set_to_zero!(boundary_flux)
 
@@ -402,7 +300,6 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
     boundary_idxs = domain.boundary_tags[boundary_key].idx
     boundary_normals = domain.boundary_tags[boundary_key].normals
 
-    # loop through boundary points
     # Modified to strongly impose BCs
     # Requires mutating u and setting du
     # to 0 at boundary locations
@@ -417,76 +314,67 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
                                                                boundary_coordinates,
                                                                t,
                                                                FluxZero(), equations)
-        # du[boundary_idx] = boundary_condition(u[boundary_idx],
-        #     boundary_normal, boundary_coordinates,
-        #     t,
-        #     FluxZero(), equations)
     end
-    # @. du += boundary_flux
-
-    # Hacky way but going to try just accumulating flux directly into du
-    # Will likely need to revisit BCs entirely for point cloud solver
-
-    # Note: modifying the values of the reshaped array modifies the values of cache.flux_face_values.
-    # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
 end
 
-function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
-                                    domain,
-                                    have_nonconservative_terms::True, equations,
-                                    solver::PointCloudSolver{NDIMS}) where {NDIMS}
-    rd = solver.basis
-    pd = domain.pd
-    surface_flux, nonconservative_flux = solver.surface_integral.surface_flux
+### Nonconservative BCs not implemented yet
+### Would only require operating on primitive var instead
+# function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
+#                                     domain,
+#                                     have_nonconservative_terms::True, equations,
+#                                     solver::PointCloudSolver{NDIMS}) where {NDIMS}
+#     rd = solver.basis
+#     pd = domain.pd
+#     surface_flux, nonconservative_flux = solver.surface_integral.surface_flux
 
-    # reshape face/normal arrays to have size = (num_points_on_face, num_faces_total).
-    # domain.boundary_faces indexes into the columns of these face-reshaped arrays.
-    num_pts_per_face = rd.Nfq ÷ StartUpDG.num_faces(rd.element_type)
-    num_faces_total = StartUpDG.num_faces(rd.element_type) * pd.num_elements
+#     # reshape face/normal arrays to have size = (num_points_on_face, num_faces_total).
+#     # domain.boundary_faces indexes into the columns of these face-reshaped arrays.
+#     num_pts_per_face = rd.Nfq ÷ StartUpDG.num_faces(rd.element_type)
+#     num_faces_total = StartUpDG.num_faces(rd.element_type) * pd.num_elements
 
-    # This function was originally defined as
-    # `reshape_by_face(u) = reshape(view(u, :), num_pts_per_face, num_faces_total)`.
-    # This results in allocations due to https://github.com/JuliaLang/julia/issues/36313.
-    # To avoid allocations, we use Tim Holy's suggestion:
-    # https://github.com/JuliaLang/julia/issues/36313#issuecomment-782336300.
-    reshape_by_face(u) = Base.ReshapedArray(u, (num_pts_per_face, num_faces_total), ())
+#     # This function was originally defined as
+#     # `reshape_by_face(u) = reshape(view(u, :), num_pts_per_face, num_faces_total)`.
+#     # This results in allocations due to https://github.com/JuliaLang/julia/issues/36313.
+#     # To avoid allocations, we use Tim Holy's suggestion:
+#     # https://github.com/JuliaLang/julia/issues/36313#issuecomment-782336300.
+#     reshape_by_face(u) = Base.ReshapedArray(u, (num_pts_per_face, num_faces_total), ())
 
-    u_face_values = reshape_by_face(cache.u_face_values)
-    flux_face_values = reshape_by_face(cache.flux_face_values)
-    Jf = reshape_by_face(pd.Jf)
-    nxyzJ, xyzf = reshape_by_face.(pd.nxyzJ), reshape_by_face.(pd.xyzf) # broadcast over nxyzJ::NTuple{NDIMS,Matrix}
+#     u_face_values = reshape_by_face(cache.u_face_values)
+#     flux_face_values = reshape_by_face(cache.flux_face_values)
+#     Jf = reshape_by_face(pd.Jf)
+#     nxyzJ, xyzf = reshape_by_face.(pd.nxyzJ), reshape_by_face.(pd.xyzf) # broadcast over nxyzJ::NTuple{NDIMS,Matrix}
 
-    # loop through boundary faces, which correspond to columns of reshaped u_face_values, ...
-    for f in domain.boundary_faces[boundary_key]
-        for i in Base.OneTo(num_pts_per_face)
-            face_normal = SVector{NDIMS}(getindex.(nxyzJ, i, f)) / Jf[i, f]
-            face_coordinates = SVector{NDIMS}(getindex.(xyzf, i, f))
+#     # loop through boundary faces, which correspond to columns of reshaped u_face_values, ...
+#     for f in domain.boundary_faces[boundary_key]
+#         for i in Base.OneTo(num_pts_per_face)
+#             face_normal = SVector{NDIMS}(getindex.(nxyzJ, i, f)) / Jf[i, f]
+#             face_coordinates = SVector{NDIMS}(getindex.(xyzf, i, f))
 
-            # Compute conservative and non-conservative fluxes separately.
-            # This imposes boundary conditions on the conservative part of the flux.
-            cons_flux_at_face_node = boundary_condition(u_face_values[i, f],
-                                                        face_normal, face_coordinates,
-                                                        t,
-                                                        surface_flux, equations)
+#             # Compute conservative and non-conservative fluxes separately.
+#             # This imposes boundary conditions on the conservative part of the flux.
+#             cons_flux_at_face_node = boundary_condition(u_face_values[i, f],
+#                                                         face_normal, face_coordinates,
+#                                                         t,
+#                                                         surface_flux, equations)
 
-            # Compute pointwise nonconservative numerical flux at the boundary.
-            # In general, nonconservative fluxes can depend on both the contravariant
-            # vectors (normal direction) at the current node and the averaged ones.
-            # However, there is only one `face_normal` at boundaries, which we pass in twice.
-            # Note: This does not set any type of boundary condition for the nonconservative term
-            noncons_flux_at_face_node = nonconservative_flux(u_face_values[i, f],
-                                                             u_face_values[i, f],
-                                                             face_normal, face_normal,
-                                                             equations)
+#             # Compute pointwise nonconservative numerical flux at the boundary.
+#             # In general, nonconservative fluxes can depend on both the contravariant
+#             # vectors (normal direction) at the current node and the averaged ones.
+#             # However, there is only one `face_normal` at boundaries, which we pass in twice.
+#             # Note: This does not set any type of boundary condition for the nonconservative term
+#             noncons_flux_at_face_node = nonconservative_flux(u_face_values[i, f],
+#                                                              u_face_values[i, f],
+#                                                              face_normal, face_normal,
+#                                                              equations)
 
-            flux_face_values[i, f] = (cons_flux_at_face_node +
-                                      0.5 * noncons_flux_at_face_node) * Jf[i, f]
-        end
-    end
+#             flux_face_values[i, f] = (cons_flux_at_face_node +
+#                                       0.5 * noncons_flux_at_face_node) * Jf[i, f]
+#         end
+#     end
 
-    # Note: modifying the values of the reshaped array modifies the values of cache.flux_face_values.
-    # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
-end
+#     # Note: modifying the values of the reshaped array modifies the values of cache.flux_face_values.
+#     # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
+# end
 
 # Multiple calc_sources! to resolve method ambiguities
 function calc_sources!(du, u, t, source_terms::Nothing,
@@ -505,32 +393,6 @@ function calc_sources!(du, u, t, source_terms,
                                                       solver, cache)
     end
 end
-
-# # Multiple calc_sources! to resolve method ambiguities
-# function calc_sources!(du, u, t, source_terms::Nothing,
-#                        domain, equations, solver::PointCloudSolver, cache)
-#     nothing
-# end
-
-# # uses quadrature + projection to compute source terms.
-# function calc_sources!(du, u, t, source_terms,
-#                        domain, equations, solver::PointCloudSolver, cache)
-#     rd = solver.basis
-#     pd = domain.pd
-#     @unpack Pq = rd
-#     @unpack u_values, local_values_threaded = cache
-#     @threaded for e in eachelement(domain, solver, cache)
-#         source_values = local_values_threaded[Threads.threadid()]
-
-#         u_e = view(u_values, :, e) # u_values should already be computed from volume integral
-
-#         for i in each_quad_node(domain, solver, cache)
-#             source_values[i] = source_terms(u_e[i], SVector(getindex.(pd.xyzq, i, e)),
-#                                             t, equations)
-#         end
-#         apply_to_each_field(mul_by_accum!(Pq), view(du, :, e), source_values)
-#     end
-# end
 
 function Trixi.rhs!(du, u, t, domain, equations,
                     initial_condition, boundary_conditions::BC, source_terms::Source,
@@ -551,36 +413,11 @@ function Trixi.rhs!(du, u, t, domain, equations,
                      solver.engine, solver, cache)
     end
 
-    # @trixi_timeit timer() "prolong2interfaces" begin
-    #     prolong2interfaces!(cache, u, domain, equations, solver.surface_integral,
-    #                         solver)
-    # end
-
-    # @trixi_timeit timer() "interface flux" begin
-    #     calc_interface_flux!(cache, solver.surface_integral, domain,
-    #                          have_nonconservative_terms(equations), equations, solver)
-    # end
-
-    # Original BC location
-    # @trixi_timeit timer() "boundary flux" begin
-    #     calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-    #         have_nonconservative_terms(equations), equations, solver)
-    # end
-
-    # @trixi_timeit timer() "surface integral" begin
-    #     calc_surface_integral!(du, u, domain, equations, solver.surface_integral,
-    #                            solver, cache)
-    # end
-
-    # @trixi_timeit timer() "Jacobian" invert_jacobian!(du, domain, equations, solver,
-    #                                                   cache)
-
     @trixi_timeit timer() "source terms" begin
         calc_sources!(du, u, t, source_terms, domain, equations, solver, cache)
     end
 
     # Require two passes for strongly imposed BCs
-    # First sets u to BC value, 
     # second sets du to zero
     @trixi_timeit timer() "boundary flux" begin
         calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,

@@ -158,6 +158,14 @@ function update_igr_rhs!(du, u,
     end
 end
 
+"""
+    update_sigma!(sigma, du, u,
+                    equations::CompressibleEulerEquations2D, domain, cache,
+                    semi_cache)
+
+"Updates" sigma by instead performing an iterative linear solver using IGRCompositeMatrix
+as the LHS operator to avoid allocations.
+"""
 function update_sigma!(sigma, du, u,
                        equations::CompressibleEulerEquations2D, domain, cache,
                        semi_cache)

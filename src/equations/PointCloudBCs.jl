@@ -1,3 +1,10 @@
+# By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
+# Since these FMAs can increase the performance of many numerical algorithms,
+# we need to opt-in explicitly.
+# See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
+@muladd begin
+#! format: noindent
+
 # Use to strongly impose BCs and zero du
 struct FluxZero end
 
@@ -88,29 +95,6 @@ Should be used together with [`UnstructuredMesh2D`](@ref).
 
     # rotate the internal solution state
     u_local = apply_slip_velocity(u_inner, normal, equations)
-    # u_inner = u_local
-
-    # compute the primitive variables
-    # rho_local, v_normal, v_tangent, p_local = cons2prim(u_local, equations)
-
-    # # Get the solution of the pressure Riemann problem
-    # # See Section 6.3.3 of
-    # # Eleuterio F. Toro (2009)
-    # # Riemann Solvers and Numerical Methods for Fluid Dynamics: A Practical Introduction
-    # # [DOI: 10.1007/b79761](https://doi.org/10.1007/b79761)
-    # if v_normal <= 0.0
-    #     sound_speed = sqrt(equations.gamma * p_local / rho_local) # local sound speed
-    #     p_star = p_local *
-    #              (1 + 0.5 * (equations.gamma - 1) * v_normal / sound_speed)^(2 *
-    #                                                                          equations.gamma *
-    #                                                                          equations.inv_gamma_minus_one)
-    # else # v_normal > 0.0
-    #     A = 2 / ((equations.gamma + 1) * rho_local)
-    #     B = p_local * (equations.gamma - 1) / (equations.gamma + 1)
-    #     p_star = p_local +
-    #              0.5 * v_normal / A *
-    #              (v_normal + sqrt(v_normal^2 + 4 * A * (p_local + B)))
-    # end
 
     # For the slip wall we directly set the flux as the normal velocity is zero
     # Strongly imposed, hardset du to 0
@@ -129,3 +113,4 @@ struct BoundaryConditionDoNothing end
     return du_inner,
            u_inner
 end
+end # @muladd

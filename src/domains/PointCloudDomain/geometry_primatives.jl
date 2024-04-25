@@ -24,7 +24,6 @@ rd = RefPointData(Tri(), N)
 ```
 """
 ### RefPointData called by basis
-# Rework for PointCloudDomain
 struct RefPointData{Dim, ElemShape <: AbstractElemShape{Dim}, ApproximationType,
                     NT, NV, F}
     element_type::ElemShape

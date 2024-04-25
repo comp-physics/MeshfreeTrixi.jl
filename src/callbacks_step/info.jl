@@ -1,4 +1,4 @@
-# Copied from Trixi and modified to call our own startup message
+# Based on Trixi. Modified to call our own startup message
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.

@@ -1,9 +1,3 @@
-####################################################################################################
-# Include files with actual implementations for callbacks called after timestep is complete 
-
-# include("residual_monitor.jl")
-# include("save_solition.jl")
-
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.

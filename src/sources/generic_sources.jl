@@ -1,3 +1,9 @@
+"""
+    SourceTerms(; kwargs...) = SourceTerms(NamedTuple(kwargs))
+
+Convenience wrapper for generic source terms. Expects sources 
+to be passed in as a NamedTuple or its entries.
+"""
 struct SourceTerms
     sources::NamedTuple
 end
