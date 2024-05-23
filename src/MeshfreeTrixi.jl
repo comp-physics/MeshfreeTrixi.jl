@@ -112,6 +112,7 @@ using WriteVTK: vtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
 using IterativeSolvers
 import Base: *
 import LinearAlgebra: mul!
+using RadialBasisFiniteDifferences
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.

@@ -240,7 +240,7 @@ function shift_stencil(X_local::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
     for j in eachindex(X_local)
         X_shift[j] = X_shift[j] .* scaling_factors
     end
-    X_shift[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...))
+    # X_shift[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
 
     return X_shift, scaling_factors
 end
@@ -412,9 +412,12 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        # local_points_shifted[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
+        local_points_shifted[1] = SVector{2, Float64}(tuple((eps(Float64) for _ in 1:2)...)) # Only need to eps rbf rhs vals
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
-        weights = M \ rhs
+        # weights = M \ rhs
+        weights = inv(M) * rhs # Check conditioning of inv(M) * rhs vs M \ rhs
         # Extract RBF Stencil Weights
         Dx_loc[e, :] = scaling_factors[1] .* weights[1:(num_neighbors), 1]
         Dy_loc[e, :] = scaling_factors[2] .* weights[1:(num_neighbors), 2]
@@ -549,9 +552,12 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        # local_points_shifted[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
+        local_points_shifted[1] = SVector{2, Float64}(tuple((eps(Float64) for _ in 1:2)...)) # Only need to eps rbf rhs vals
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
-        weights = M \ rhs
+        # weights = M \ rhs
+        weights = inv(M) * rhs
         # Extract RBF Stencil Weights
         Dxk_loc[e, :] = scaling_factors[1]^k .* weights[1:(num_neighbors), 1]
         Dyk_loc[e, :] = scaling_factors[2]^k .* weights[1:(num_neighbors), 2]
