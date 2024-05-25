@@ -1,84 +1,84 @@
 """
-    concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}; k::Int) where {NDIMS}
+    concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}; k::Int)
 
 Create a concrete RBF basis of compiled functions for the given RBF and basis.
 Returns a NamedTuple with the compiled functions for the RBF and its first derivative.
 If executed with a specific derivative order `k`, the function will return the 
 k-th derivative of the RBF.
 """
-function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}) where {NDIMS}
-    if NDIMS == 1
-        @variables x
-        Dx = Differential(x)
-        rbf_x = simplify(expand_derivatives(Dx(rbf)))
-        rbf_expr = build_function(rbf, [x]; expression = Val{false})
-        rbf_x_expr = build_function(rbf_x, [x, y]; expression = Val{false})
-        return (; rbf_expr, rbf_x_expr)
-    elseif NDIMS == 2
-        @variables x y
-        Dx = Differential(x)
-        Dy = Differential(y)
-        rbf_x = simplify(expand_derivatives(Dx(rbf)))
-        rbf_y = simplify(expand_derivatives(Dy(rbf)))
-        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
-        rbf_x_expr = build_function(rbf_x, [x, y]; expression = Val{false})
-        rbf_y_expr = build_function(rbf_y, [x, y]; expression = Val{false})
-        return (; rbf_expr, rbf_x_expr, rbf_y_expr)
-    elseif NDIMS == 3
-        @variables x y z
-        Dx = Differential(x)
-        Dy = Differential(y)
-        Dz = Differential(z)
-        rbf_x = simplify(expand_derivatives(Dx(rbf)))
-        rbf_y = simplify(expand_derivatives(Dy(rbf)))
-        rbf_z = simplify(expand_derivatives(Dz(rbf)))
-        rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
-        rbf_x_expr = build_function(rbf_x, [x, y, z]; expression = Val{false})
-        rbf_y_expr = build_function(rbf_y, [x, y, z]; expression = Val{false})
-        rbf_z_expr = build_function(rbf_z, [x, y, z]; expression = Val{false})
-        return (; rbf_expr, rbf_x_expr, rbf_y_expr, rbf_z_expr)
-    end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{1})
+    @variables x
+    Dx = Differential(x)
+    rbf_x = simplify(expand_derivatives(Dx(rbf)))
+    rbf_expr = build_function(rbf, [x]; expression = Val{false})
+    rbf_x_expr = build_function(rbf_x, [x, y]; expression = Val{false})
+    return (; rbf_expr, rbf_x_expr)
+end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{2})
+    @variables x y
+    Dx = Differential(x)
+    Dy = Differential(y)
+    rbf_x = simplify(expand_derivatives(Dx(rbf)))
+    rbf_y = simplify(expand_derivatives(Dy(rbf)))
+    rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    rbf_x_expr = build_function(rbf_x, [x, y]; expression = Val{false})
+    rbf_y_expr = build_function(rbf_y, [x, y]; expression = Val{false})
+    return (; rbf_expr, rbf_x_expr, rbf_y_expr)
+end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{3})
+    @variables x y z
+    Dx = Differential(x)
+    Dy = Differential(y)
+    Dz = Differential(z)
+    rbf_x = simplify(expand_derivatives(Dx(rbf)))
+    rbf_y = simplify(expand_derivatives(Dy(rbf)))
+    rbf_z = simplify(expand_derivatives(Dz(rbf)))
+    rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
+    rbf_x_expr = build_function(rbf_x, [x, y, z]; expression = Val{false})
+    rbf_y_expr = build_function(rbf_y, [x, y, z]; expression = Val{false})
+    rbf_z_expr = build_function(rbf_z, [x, y, z]; expression = Val{false})
+    return (; rbf_expr, rbf_x_expr, rbf_y_expr, rbf_z_expr)
 end
 
 # Specialized Basis generation for k-th derivative order
-function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
-    if NDIMS == 1
-        @variables x
-        Dxk = Differential(x)^k
-        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
-        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
-        rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
-        return (; rbf_expr,
-                rbf_x_expr = rbf_xk_expr)
-    elseif NDIMS == 2
-        @variables x y
-        Dxk = Differential(x)^k
-        Dyk = Differential(y)^k
-        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
-        rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
-        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
-        rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
-        rbf_yk_expr = build_function(rbf_yk, [x, y]; expression = Val{false})
-        return (; rbf_expr,
-                rbf_x_expr = rbf_xk_expr,
-                rbf_y_expr = rbf_yk_expr)
-    elseif NDIMS == 3
-        @variables x y z
-        Dxk = Differential(x)^k
-        Dyk = Differential(y)^k
-        Dzk = Differential(z)^k
-        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
-        rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
-        rbf_zk = simplify(expand_derivatives(Dzk(rbf)))
-        rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
-        rbf_xk_expr = build_function(rbf_xk, [x, y, z]; expression = Val{false})
-        rbf_yk_expr = build_function(rbf_yk, [x, y, z]; expression = Val{false})
-        rbf_zk_expr = build_function(rbf_zk, [x, y, z]; expression = Val{false})
-        return (; rbf_expr,
-                rbf_x_expr = rbf_xk_expr,
-                rbf_y_expr = rbf_yk_expr,
-                rbf_z_expr = rbf_zk_expr)
-    end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{1}, k::Int)
+    @variables x
+    Dxk = Differential(x)^k
+    rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+    rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
+    return (; rbf_expr,
+            rbf_x_expr = rbf_xk_expr)
+end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{2}, k::Int)
+    @variables x y
+    Dxk = Differential(x)^k
+    Dyk = Differential(y)^k
+    rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+    rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
+    rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
+    rbf_yk_expr = build_function(rbf_yk, [x, y]; expression = Val{false})
+    return (; rbf_expr,
+            rbf_x_expr = rbf_xk_expr,
+            rbf_y_expr = rbf_yk_expr)
+end
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{3}, k::Int)
+    @variables x y z
+    Dxk = Differential(x)^k
+    Dyk = Differential(y)^k
+    Dzk = Differential(z)^k
+    rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+    rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
+    rbf_zk = simplify(expand_derivatives(Dzk(rbf)))
+    rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
+    rbf_xk_expr = build_function(rbf_xk, [x, y, z]; expression = Val{false})
+    rbf_yk_expr = build_function(rbf_yk, [x, y, z]; expression = Val{false})
+    rbf_zk_expr = build_function(rbf_zk, [x, y, z]; expression = Val{false})
+    return (; rbf_expr,
+            rbf_x_expr = rbf_xk_expr,
+            rbf_y_expr = rbf_yk_expr,
+            rbf_z_expr = rbf_zk_expr)
 end
 
 """
@@ -89,97 +89,97 @@ Returns a NamedTuple with the compiled functions for all monomials and its first
 If executed with a specific derivative order `k`, the function will return the 
 k-th derivative of the monomials.
 """
-function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS}
-    if NDIMS == 1
-        # @polyvar x # diff wrt existing vars, new polyvar doesn't work
-        poly_x = differentiate.(poly, poly[end].vars[1])
-        f = StaticPolynomials.Polynomial.(poly)
-        f_x = StaticPolynomials.Polynomial.(poly_x)
-        poly_expr = PolynomialSystem(f...)
-        poly_x_expr = PolynomialSystem(f_x...)
-        return (; poly_expr, poly_x_expr)
-    elseif NDIMS == 2
-        # @polyvar x y
-        poly_x = differentiate.(poly, poly[end].vars[1])
-        poly_y = differentiate.(poly, poly[end].vars[2])
-        f = StaticPolynomials.Polynomial.(poly)
-        f_x = StaticPolynomials.Polynomial.(poly_x)
-        f_y = StaticPolynomials.Polynomial.(poly_y)
-        poly_expr = PolynomialSystem(f...)
-        poly_x_expr = PolynomialSystem(f_x...)
-        poly_y_expr = PolynomialSystem(f_y...)
-        return (; poly_expr, poly_x_expr, poly_y_expr)
-    elseif NDIMS == 3
-        # @polyvar x y z
-        poly_x = differentiate.(poly, poly[end].vars[1])
-        poly_y = differentiate.(poly, poly[end].vars[2])
-        poly_z = differentiate.(poly, poly[end].vars[3])
-        f = StaticPolynomials.Polynomial.(poly)
-        f_x = StaticPolynomials.Polynomial.(poly_x)
-        f_y = StaticPolynomials.Polynomial.(poly_y)
-        f_z = StaticPolynomials.Polynomial.(poly_z)
-        poly_expr = PolynomialSystem(f...)
-        poly_x_expr = PolynomialSystem(f_x...)
-        poly_y_expr = PolynomialSystem(f_y...)
-        poly_z_expr = PolynomialSystem(f_z...)
-        return (; poly_expr, poly_x_expr, poly_y_expr, poly_z_expr)
-    end
+function concrete_poly_flux_basis(poly, basis::RefPointData{1})
+    # @polyvar x # diff wrt existing vars, new polyvar doesn't work
+    poly_x = differentiate.(poly, poly[end].vars[1])
+    f = StaticPolynomials.Polynomial.(poly)
+    f_x = StaticPolynomials.Polynomial.(poly_x)
+    poly_expr = PolynomialSystem(f...)
+    poly_x_expr = PolynomialSystem(f_x...)
+    return (; poly_expr, poly_x_expr)
+end
+function concrete_poly_flux_basis(poly, basis::RefPointData{2})
+    # @polyvar x y
+    poly_x = differentiate.(poly, poly[end].vars[1])
+    poly_y = differentiate.(poly, poly[end].vars[2])
+    f = StaticPolynomials.Polynomial.(poly)
+    f_x = StaticPolynomials.Polynomial.(poly_x)
+    f_y = StaticPolynomials.Polynomial.(poly_y)
+    poly_expr = PolynomialSystem(f...)
+    poly_x_expr = PolynomialSystem(f_x...)
+    poly_y_expr = PolynomialSystem(f_y...)
+    return (; poly_expr, poly_x_expr, poly_y_expr)
+end
+function concrete_poly_flux_basis(poly, basis::RefPointData{3})
+    # @polyvar x y z
+    poly_x = differentiate.(poly, poly[end].vars[1])
+    poly_y = differentiate.(poly, poly[end].vars[2])
+    poly_z = differentiate.(poly, poly[end].vars[3])
+    f = StaticPolynomials.Polynomial.(poly)
+    f_x = StaticPolynomials.Polynomial.(poly_x)
+    f_y = StaticPolynomials.Polynomial.(poly_y)
+    f_z = StaticPolynomials.Polynomial.(poly_z)
+    poly_expr = PolynomialSystem(f...)
+    poly_x_expr = PolynomialSystem(f_x...)
+    poly_y_expr = PolynomialSystem(f_y...)
+    poly_z_expr = PolynomialSystem(f_z...)
+    return (; poly_expr, poly_x_expr, poly_y_expr, poly_z_expr)
 end
 
 # Specialized Basis generation for k-th derivative order
-function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
-    if NDIMS == 1
-        # @polyvar x # diff wrt existing vars, new polyvar doesn't work
-        poly_xk = deepcopy(poly)
-        for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
-        end
-        f = StaticPolynomials.Polynomial.(poly)
-        f_xk = StaticPolynomials.Polynomial.(poly_xk)
-        poly_expr = PolynomialSystem(f...)
-        poly_xk_expr = PolynomialSystem(f_xk...)
-        return (; poly_expr,
-                poly_x_expr = poly_xk_expr)
-    elseif NDIMS == 2
-        # @polyvar x y
-        poly_xk = deepcopy(poly)
-        poly_yk = deepcopy(poly)
-        for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
-            poly_yk = differentiate.(poly_yk, poly[end].vars[2])
-        end
-        f = StaticPolynomials.Polynomial.(poly)
-        f_xk = StaticPolynomials.Polynomial.(poly_xk)
-        f_yk = StaticPolynomials.Polynomial.(poly_yk)
-        poly_expr = PolynomialSystem(f...)
-        poly_xk_expr = PolynomialSystem(f_xk...)
-        poly_yk_expr = PolynomialSystem(f_yk...)
-        return (; poly_expr,
-                poly_x_expr = poly_xk_expr,
-                poly_y_expr = poly_yk_expr)
-    elseif NDIMS == 3
-        # @polyvar x y z
-        poly_xk = deepcopy(poly)
-        poly_yk = deepcopy(poly)
-        poly_zk = deepcopy(poly)
-        for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
-            poly_yk = differentiate.(poly_yk, poly[end].vars[2])
-            poly_zk = differentiate.(poly_zk, poly[end].vars[3])
-        end
-        f = StaticPolynomials.Polynomial.(poly)
-        f_xk = StaticPolynomials.Polynomial.(poly_xk)
-        f_yk = StaticPolynomials.Polynomial.(poly_yk)
-        f_zk = StaticPolynomials.Polynomial.(poly_zk)
-        poly_expr = PolynomialSystem(f...)
-        poly_xk_expr = PolynomialSystem(f_xk...)
-        poly_yk_expr = PolynomialSystem(f_yk...)
-        poly_zk_expr = PolynomialSystem(f_zk...)
-        return (; poly_expr,
-                poly_x_expr = poly_xk_expr,
-                poly_y_expr = poly_yk_expr,
-                poly_xz_expr = poly_zk_expr)
+function concrete_poly_flux_basis(poly, basis::RefPointData{1}, k::Int)
+    # @polyvar x # diff wrt existing vars, new polyvar doesn't work
+    poly_xk = deepcopy(poly)
+    for i in 1:k # Differentiate k-times
+        poly_xk = differentiate.(poly_xk, poly[end].vars[1])
     end
+    f = StaticPolynomials.Polynomial.(poly)
+    f_xk = StaticPolynomials.Polynomial.(poly_xk)
+    poly_expr = PolynomialSystem(f...)
+    poly_xk_expr = PolynomialSystem(f_xk...)
+    return (; poly_expr,
+            poly_x_expr = poly_xk_expr)
+end
+function concrete_poly_flux_basis(poly, basis::RefPointData{2}, k::Int)
+    # @polyvar x y
+    poly_xk = deepcopy(poly)
+    poly_yk = deepcopy(poly)
+    for i in 1:k # Differentiate k-times
+        poly_xk = differentiate.(poly_xk, poly[end].vars[1])
+        poly_yk = differentiate.(poly_yk, poly[end].vars[2])
+    end
+    f = StaticPolynomials.Polynomial.(poly)
+    f_xk = StaticPolynomials.Polynomial.(poly_xk)
+    f_yk = StaticPolynomials.Polynomial.(poly_yk)
+    poly_expr = PolynomialSystem(f...)
+    poly_xk_expr = PolynomialSystem(f_xk...)
+    poly_yk_expr = PolynomialSystem(f_yk...)
+    return (; poly_expr,
+            poly_x_expr = poly_xk_expr,
+            poly_y_expr = poly_yk_expr)
+end
+function concrete_poly_flux_basis(poly, basis::RefPointData{3}, k::Int)
+    # @polyvar x y z
+    poly_xk = deepcopy(poly)
+    poly_yk = deepcopy(poly)
+    poly_zk = deepcopy(poly)
+    for i in 1:k # Differentiate k-times
+        poly_xk = differentiate.(poly_xk, poly[end].vars[1])
+        poly_yk = differentiate.(poly_yk, poly[end].vars[2])
+        poly_zk = differentiate.(poly_zk, poly[end].vars[3])
+    end
+    f = StaticPolynomials.Polynomial.(poly)
+    f_xk = StaticPolynomials.Polynomial.(poly_xk)
+    f_yk = StaticPolynomials.Polynomial.(poly_yk)
+    f_zk = StaticPolynomials.Polynomial.(poly_zk)
+    poly_expr = PolynomialSystem(f...)
+    poly_xk_expr = PolynomialSystem(f_xk...)
+    poly_yk_expr = PolynomialSystem(f_yk...)
+    poly_zk_expr = PolynomialSystem(f_zk...)
+    return (; poly_expr,
+            poly_x_expr = poly_xk_expr,
+            poly_y_expr = poly_yk_expr,
+            poly_xz_expr = poly_zk_expr)
 end
 
 """
@@ -243,6 +243,23 @@ function shift_stencil(X_local::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
     # X_shift[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
 
     return X_shift, scaling_factors
+end
+
+function mirror_stencil(X_local::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
+    # Shift to origin
+    # Determine size for Distance Block
+    X_shift = similar(X_local) # Rework to use SVector
+    # Assume points are already shifted and scaled in general
+
+    # Scale and add small offset to prevent div-by-0
+    # Flip such that we are evaluating x_c - x_i = 0.0 - x_i
+    scaling_factors = [-1.0 for _ in 1:NDIMS]
+    for j in eachindex(X_local)
+        X_shift[j] = X_local[j] .* scaling_factors
+    end
+    X_shift[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
+
+    return X_shift
 end
 
 function interpolation_block(R::Matrix, P::Matrix)
@@ -412,12 +429,11 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
-        # local_points_shifted[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
-        local_points_shifted[1] = SVector{2, Float64}(tuple((eps(Float64) for _ in 1:2)...)) # Only need to eps rbf rhs vals
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
-        # weights = M \ rhs
-        weights = inv(M) * rhs # Check conditioning of inv(M) * rhs vs M \ rhs
+        weights = M \ rhs
+        # weights = inv(M) * rhs # Check conditioning of inv(M) * rhs vs M \ rhs
         # Extract RBF Stencil Weights
         Dx_loc[e, :] = scaling_factors[1] .* weights[1:(num_neighbors), 1]
         Dy_loc[e, :] = scaling_factors[2] .* weights[1:(num_neighbors), 2]
@@ -459,6 +475,7 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
@@ -504,6 +521,7 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
@@ -552,12 +570,11 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
-        # local_points_shifted[1] = SVector{NDIMS, T}(tuple((eps(T) for _ in 1:NDIMS)...)) # Only need to eps rbf rhs vals
-        local_points_shifted[1] = SVector{2, Float64}(tuple((eps(Float64) for _ in 1:2)...)) # Only need to eps rbf rhs vals
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
-        # weights = M \ rhs
-        weights = inv(M) * rhs
+        weights = M \ rhs
+        # weights = inv(M) * rhs
         # Extract RBF Stencil Weights
         Dxk_loc[e, :] = scaling_factors[1]^k .* weights[1:(num_neighbors), 1]
         Dyk_loc[e, :] = scaling_factors[2]^k .* weights[1:(num_neighbors), 2]
@@ -601,6 +618,7 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
@@ -647,6 +665,7 @@ function compute_flux_operator(solver::RBFSolver,
         M = interpolation_block(R, P)
         # Assemble RHS
         poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        local_points_shifted = mirror_stencil(local_points_shifted)
         rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
