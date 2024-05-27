@@ -111,6 +111,7 @@ struct PolyharmonicSpline
     Nrbf::Int
     PolyharmonicSpline(Nrbf::Int = 3) = new(Nrbf)  # Default order is 3
 end
+PolyharmonicSpline(; Nrbf::Int = 3) = PolyharmonicSpline(Nrbf)
 RBF(rbf_type::PolyharmonicSpline) = RBF{PolyharmonicSpline}(rbf_type, rbf_type.Nrbf)
 
 # RBF(HybridGaussianPHS()) type indicates blended Gaussian and odd order polyharmonic spline RBFs w/ appended monomials
@@ -123,6 +124,10 @@ struct HybridGaussianPHS
                                epsilon::Float64 = 1.0)
         new(Nrbf, alpha, beta, epsilon)
     end  # Default order is 3
+end
+function HybridGaussianPHS(; Nrbf::Int = 3, alpha::Float64 = 1.0, beta::Float64 = 1.0,
+                           epsilon::Float64 = 1.0)
+    HybridGaussianPHS(Nrbf, alpha, beta, epsilon)
 end
 RBF(rbf_type::HybridGaussianPHS) = RBF{HybridGaussianPHS}(rbf_type, rbf_type.Nrbf)
 
