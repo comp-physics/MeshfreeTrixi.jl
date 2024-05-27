@@ -169,7 +169,7 @@ export concrete_rbf_flux_basis, concrete_poly_flux_basis, compute_flux_operator
 
 # Export Basis Details
 export RefPointData, Point1D, Point2D, Point3D,
-       PointCloudBasis, PolyharmonicSpline, RBF
+       PointCloudBasis, RBF, PolyharmonicSpline, HybridGaussianPHS
 
 export HistoryCallback, InfoCallback, SolutionSavingCallback, PerformanceCallback
 

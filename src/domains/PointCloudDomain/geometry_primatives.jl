@@ -104,17 +104,27 @@ struct DefaultRBFType
     DefaultRBFType(Nrbf::Int = 3) = new(Nrbf)  # Default order is 3
 end
 RBF() = RBF(DefaultRBFType())
-# RBF(rbf_type::DefaultRBFType, Nrbf::Int = 3) = RBF{DefaultRBFType}(rbf_type, Nrbf)
 RBF(rbf_type::DefaultRBFType) = RBF{DefaultRBFType}(rbf_type, rbf_type.Nrbf)
 
-# RBF(PolyharmonicSpline()) type indicates (N+1)-point Gauss quadrature on tensor product elements
+# RBF(PolyharmonicSpline()) type indicates odd order polyharmonic spline RBFs w/ appended monomials
 struct PolyharmonicSpline
     Nrbf::Int
     PolyharmonicSpline(Nrbf::Int = 3) = new(Nrbf)  # Default order is 3
 end
-# RBF{PolyharmonicSpline}() = RBF(PolyharmonicSpline())
-# RBF(rbf_type::PolyharmonicSpline, Nrbf::Int = 3) = RBF{PolyharmonicSpline}(rbf_type, Nrbf)
 RBF(rbf_type::PolyharmonicSpline) = RBF{PolyharmonicSpline}(rbf_type, rbf_type.Nrbf)
+
+# RBF(HybridGaussianPHS()) type indicates blended Gaussian and odd order polyharmonic spline RBFs w/ appended monomials
+struct HybridGaussianPHS
+    Nrbf::Int
+    alpha::Float64
+    beta::Float64
+    epsilon::Float64
+    function HybridGaussianPHS(Nrbf::Int = 3, alpha::Float64 = 1.0, beta::Float64 = 1.0,
+                               epsilon::Float64 = 1.0)
+        new(Nrbf, alpha, beta, epsilon)
+    end  # Default order is 3
+end
+RBF(rbf_type::HybridGaussianPHS) = RBF{HybridGaussianPHS}(rbf_type, rbf_type.Nrbf)
 
 # ====================================
 #              Printing 
@@ -193,43 +203,85 @@ function create_basis(elem::AbstractElemShape{Dim},
     return (; rbf, poly)
 end
 
-function rbf_basis(elem::AbstractElemShape{Dim},
-                   approx_type::RBF{PolyharmonicSpline}, N) where {Dim}
+# PHS
+function rbf_basis(elem::AbstractElemShape{1},
+                   approx_type::RBF{PolyharmonicSpline}, N)
     # Specialize this function to create RBF bases for specific
-    # RBF types
+    # RBF types and dimensions
     p = approx_type.Nrbf
-    if Dim == 1
-        @variables x
-        rbf = sqrt(x^2)^p
-        rbf_expr = build_function(rbf, [x]; expression = Val{false})
-    elseif Dim == 2
-        @variables x y
-        rbf = sqrt(x^2 + y^2)^p
-        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
-    elseif Dim == 3
-        @variables x y z
-        rbf = sqrt(x^2 + y^2 + z^2)^p
-        rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
-    end
-
+    @variables x
+    rbf = sqrt(x^2)^p
+    rbf_expr = build_function(rbf, [x]; expression = Val{false})
+    return rbf
+end
+function rbf_basis(elem::AbstractElemShape{2},
+                   approx_type::RBF{PolyharmonicSpline}, N)
+    p = approx_type.Nrbf
+    @variables x y
+    rbf = sqrt(x^2 + y^2)^p
+    rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    return rbf
+end
+function rbf_basis(elem::AbstractElemShape{3},
+                   approx_type::RBF{PolyharmonicSpline}, N)
+    p = approx_type.Nrbf
+    @variables x y z
+    rbf = sqrt(x^2 + y^2 + z^2)^p
+    rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
+    return rbf
+end
+# Hybrid Kernel
+function rbf_basis(elem::AbstractElemShape{1},
+                   approx_type::RBF{HybridGaussianPHS}, N)
+    # Specialize this function to create RBF bases for specific
+    # RBF types and dimensions
+    @unpack Nrbf, alpha, beta, epsilon = approx_type.rbf_type
+    @variables x
+    r = sqrt(x^2)
+    rbf = alpha * exp(-(epsilon * r)^2) + beta * r^Nrbf
+    rbf_expr = build_function(rbf, [x]; expression = Val{false})
+    return rbf
+end
+function rbf_basis(elem::AbstractElemShape{2},
+                   approx_type::RBF{HybridGaussianPHS}, N)
+    @unpack Nrbf, alpha, beta, epsilon = approx_type.rbf_type
+    @variables x y
+    r = sqrt(x^2 + y^2)
+    rbf = alpha * exp(-(epsilon * r)^2) + beta * r^Nrbf
+    rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    return rbf
+end
+function rbf_basis(elem::AbstractElemShape{3},
+                   approx_type::RBF{HybridGaussianPHS}, N)
+    @unpack Nrbf, alpha, beta, epsilon = approx_type.rbf_type
+    @variables x y z
+    r = sqrt(x^2 + y^2 + z^2)
+    rbf = alpha * exp(-(epsilon * r)^2) + beta * r^Nrbf
+    rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
     return rbf
 end
 
-function poly_basis(elem::AbstractElemShape{Dim},
-                    approx_type::RBF, N) where {Dim}
+function poly_basis(elem::AbstractElemShape{1},
+                    approx_type::RBF, N)
     # Specialize this function to create polynomial bases for specific
     # RBF types
-
-    if Dim == 1
-        @polyvar x
-        poly = monomials([x], 0:N)
-    elseif Dim == 2
-        @polyvar x y
-        poly = monomials([x, y], 0:N)
-    elseif Dim == 3
-        @polyvar x y z
-        poly = monomials([x, y, z], 0:N)
-    end
-
+    @polyvar x
+    poly = monomials([x], 0:N)
+    return poly
+end
+function poly_basis(elem::AbstractElemShape{2},
+                    approx_type::RBF, N)
+    # Specialize this function to create polynomial bases for specific
+    # RBF types
+    @polyvar x y
+    poly = monomials([x, y], 0:N)
+    return poly
+end
+function poly_basis(elem::AbstractElemShape{3},
+                    approx_type::RBF, N)
+    # Specialize this function to create polynomial bases for specific
+    # RBF types
+    @polyvar x y z
+    poly = monomials([x, y, z], 0:N)
     return poly
 end
