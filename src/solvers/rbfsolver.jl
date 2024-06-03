@@ -57,6 +57,9 @@ struct RBFFDEngine <: AbstractRBFEngine end
 # end
 
 create_cache(mesh, equations, ::RBFFDEngine, solver, uEltype) = NamedTuple()
+struct RBFFDEngineCUDA <: AbstractRBFEngine end
+create_cache(mesh, equations, ::RBFFDEngineCUDA, solver, uEltype) = NamedTuple()
+
 """
     RBFSolver(; basis, engine)
 
@@ -86,7 +89,7 @@ function Base.show(io::IO, mime::MIME"text/plain", solver::RBFSolver)
         summary_line(io, "basis", solver.basis)
         summary_line(io, "engine",
                      solver.engine |> typeof |> nameof)
-        if !(solver.engine isa RBFFDEngine)
+        if !(solver.engine isa AbstractRBFEngine)
             show(increment_indent(io), mime, solver.engine)
         end
         summary_footer(io)
@@ -204,7 +207,7 @@ end
 @inline nboundaries(solver::RBFSolver, cache) = nboundaries(cache.boundaries)
 # @inline nmortars(solver::RBFSolver, cache) = nmortars(cache.mortars)
 @inline nmpiinterfaces(solver::RBFSolver, cache) = nmpiinterfaces(cache.mpi_interfaces)
-@inline nmpimortars(solver::RBFSolver, cache) = nmpimortars(cache.mpi_mortars)
+# @inline nmpimortars(solver::RBFSolver, cache) = nmpimortars(cache.mpi_mortars)
 
 # # The following functions assume an array-of-structs memory layout
 # # We would like to experiment with different memory layout choices

@@ -160,7 +160,7 @@ export PointCloudDomain
 # Export Solvers and Methods
 # Engines replace VolumeIntegral
 export PointCloudSolver, RBFSolver,
-       RBFFDEngine
+       RBFFDEngine, RBFFDEngineCUDA
 
 # Internal Methods for Solvers
 export concrete_rbf_flux_basis, concrete_poly_flux_basis, compute_flux_operator

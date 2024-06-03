@@ -22,9 +22,9 @@ const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = RBFSolver{<:RefPoi
 
 # these are necessary for pretty printing
 polydeg(solver::PointCloudSolver) = solver.basis.N
-function Base.summary(io::IO, solver::RBFSolver) where {RBFSolver <: PointCloudSolver}
-    print(io, "PointCloudSolver(polydeg=$(polydeg(solver)))")
-end
+# function Base.summary(io::IO, solver::RBFSolver) where {RBFSolver <: PointCloudSolver}
+#     print(io, "PointCloudSolver(polydeg=$(polydeg(solver)))")
+# end
 
 # real(rd) is the eltype of the nodes `rd.r`.
 # Base.real(rd::RefPointData) = eltype(rd.r)
@@ -145,4 +145,36 @@ end
 function Trixi.check_periodicity_mesh_boundary_conditions(mesh::PointCloudDomain,
                                                           boundary_conditions)
 end
+
+# Specialize printing for MPI and CUDA versions of PointCloudDomain
+function Base.show(io::IO, solver::PointCloudSolver)
+    @nospecialize solver # reduce precompilation time
+
+    print(io, "PointCloudSolver{", real(solver), "}(")
+    print(io, solver.basis)
+    print(io, ", ", solver.engine)
+    print(io, ")")
+end
+
+function Base.show(io::IO, mime::MIME"text/plain", solver::PointCloudSolver)
+    @nospecialize solver # reduce precompilation time
+
+    if get(io, :compact, false)
+        show(io, solver)
+    else
+        summary_header(io, "PointCloudSolver{" * string(real(solver)) * "}")
+        summary_line(io, "basis", solver.basis)
+        summary_line(io, "engine",
+                     solver.engine |> typeof |> nameof)
+        if !(solver.engine isa AbstractRBFEngine)
+            show(increment_indent(io), mime, solver.engine)
+        end
+        summary_footer(io)
+    end
+end
+
+Base.summary(io::IO, solver::PointCloudSolver) = print(io,
+                                                       "PointCloudSolver(" *
+                                                       summary(solver.basis) *
+                                                       ")")
 end # @muladd
