@@ -89,7 +89,8 @@ using DelimitedFiles
 import DynamicPolynomials: @polyvar
 import DynamicPolynomials: monomials
 import DynamicPolynomials: differentiate
-using StaticPolynomials
+# using StaticPolynomials
+using StaticPolynomials: StaticPolynomials, evaluate, Polynomial, PolynomialSystem
 using Symbolics
 # using Trixi
 using ConstructionBase

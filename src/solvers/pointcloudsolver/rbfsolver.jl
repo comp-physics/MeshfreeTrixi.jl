@@ -128,7 +128,7 @@ end
 # Esp. since we need to generate operator matrices here
 # that depend on our governing equation
 function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
-                            solver::RBFSolver, RealT,
+                            solver::PointCloudSolver, RealT,
                             uEltype) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
