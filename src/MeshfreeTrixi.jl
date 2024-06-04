@@ -27,6 +27,11 @@ using Trixi: @threaded
 using Trixi: @trixi_timeit, timer
 # using Trixi: summary_header, summary_line, summary_footer, increment_indent, summary_box
 using Trixi: True, False, nvariables, have_nonconservative_terms, One
+# MPI-related functions and variables
+using Trixi: init_mpi, mpi_comm,
+             mpi_rank, mpi_nranks, mpi_isparallel, mpi_isroot, mpi_root, mpi_println,
+             mpi_print, ode_norm, recursive_sum_abs2, recursive_length, ode_unstable_check,
+             ode_default_options
 
 import Trixi: rhs!
 
@@ -76,7 +81,10 @@ import Trixi: rhs!
 # using SimpleUnPack: @pack!
 # using DataStructures: BinaryHeap, FasterForward, extract_all!
 
-# RBFD.jl dependencies
+# MeshfreeTrixi Dependencies
+# # MPI needs to be imported before HDF5 to be able to use parallel HDF5
+# # as long as HDF5.jl uses Requires.jl to enable parallel HDF5 with MPI
+using MPI: MPI
 using SciMLBase: CallbackSet, DiscreteCallback,
                  ODEProblem, ODESolution, ODEFunction,
                  SplitODEProblem
