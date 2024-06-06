@@ -290,3 +290,55 @@ function poly_basis(elem::AbstractElemShape{3},
     poly = monomials([x, y, z], 0:N)
     return poly
 end
+
+# Similar to StartUpDG.MeshData
+# This is the underlying data structure for PointCloudDomain
+# Mostly reworked 
+struct PointData{Dim, Tv, Ti}
+    points::Vector{Tv}                # Point coordinates
+    neighbors::Vector{Vector{Ti}}     # Neighbors for each point
+    num_points::Int                   # Number of points
+    num_neighbors::Int                # Number of neighbors lists
+    dx_min::Float64                   # Minimum distance between points
+    dx_avg::Float64                   # Average distance between points
+end
+
+## We need to calculate dx_min at runtime so we cannot use this constructor
+# function PointData(points::Vector{Tv},
+#                    neighbors::Vector{Vector{Ti}}) where {
+#                                                          Dim,
+#                                                          Tv <: SVector{Dim, Float64},
+#                                                          Ti
+#                                                          }
+#     PointData{Dim, Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
+# end
+
+"""
+    PointData(medusa_data::Vector{Tv}, basis) where {Tv <: SVector{Dim, Float64}}
+
+- `medusa_data` contains point positions for entire point cloud.
+- `basis` contains all basis information including the number of required neighbors to support required order of accuracy.
+"""
+function PointData(medusa_data::Vector{Tv},
+                   basis::RefPointData) where {Dim, Tv <: SVector{Dim, Float64}}
+    nv = basis.nv  # The number of neighbors
+
+    # Calculate neighbor list for all points
+    kdtree = KDTree(medusa_data)
+    n_idxs, n_dists = knn(kdtree, medusa_data, nv, true)
+    dx_min = minimum(n_dists)
+
+    # Calculate avg and min distances between points
+    idxs_y, dists_y = knn(kdtree, medusa_data, 2, true)
+    dx_avg = mean(dists_y)[2]
+    dx_min = minimum(dists_y)[2]
+
+    # Instantiate PointData with the points and neighbors. The num_points and num_neighbors are automatically computed.
+    return PointData{Dim, Tv, Int}(medusa_data, n_idxs, length(medusa_data), nv, dx_min,
+                                   dx_avg)
+end
+
+struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
+    idx::Vector{Ti}       # Indices of boundary points
+    normals::Vector{Tv}   # Normals at boundary points
+end

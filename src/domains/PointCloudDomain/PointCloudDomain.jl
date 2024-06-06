@@ -1,88 +1,55 @@
-# Similar to StartUpDG.MeshData
-# This is the underlying data structure for PointCloudDomain
-# Mostly reworked 
-struct PointData{Dim, Tv, Ti}
-    points::Vector{Tv}                # Point coordinates
-    neighbors::Vector{Vector{Ti}}     # Neighbors for each point
-    num_points::Int                   # Number of points
-    num_neighbors::Int                # Number of neighbors lists
-    dx_min::Float64                   # Minimum distance between points
-    dx_avg::Float64                   # Average distance between points
-end
+"""
+    PointCloudDomain(NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
 
-## We need to calculate dx_min at runtime so we cannot use this constructor
-# function PointData(points::Vector{Tv},
-#                    neighbors::Vector{Vector{Ti}}) where {
-#                                                          Dim,
-#                                                          Tv <: SVector{Dim, Float64},
-#                                                          Ti
-#                                                          }
-#     PointData{Dim, Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
+Domain specification containing point cloud data structure and boundary tags 
+for a point cloud domain. Includes specialization for MPI parallelism.
+"""
+# struct PointCloudDomain{NDIMS, domain_type, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
+#     domain_type::DomainType
+#     pd::PointDataT
+#     boundary_tags::BoundaryFaceT
+#     unsaved_changes::Bool # Required for SaveSolutionCallback
 # end
 
-"""
-    PointData(medusa_data::Vector{Tv}, basis) where {Tv <: SVector{Dim, Float64}}
+include("SerialPointCloud.jl")
+include("ParallelPointCloud.jl")
 
-- `medusa_data` contains point positions for entire point cloud.
-- `basis` contains all basis information including the number of required neighbors to support required order of accuracy.
-"""
-function PointData(medusa_data::Vector{Tv},
-                   basis::RefPointData) where {Dim, Tv <: SVector{Dim, Float64}}
-    nv = basis.nv  # The number of neighbors
+# const SerialPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:SerialPointCloud{NDIMS}}
+# const ParallelPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:ParallelPointCloud{NDIMS}}
 
-    # Calculate neighbor list for all points
-    kdtree = KDTree(medusa_data)
-    n_idxs, n_dists = knn(kdtree, medusa_data, nv, true)
-    dx_min = minimum(n_dists)
+@inline mpi_parallel(mesh::PointCloudDomain) = False()
+# @inline mpi_parallel(mesh::SerialPointCloudDomain) = False()
+@inline mpi_parallel(mesh::ParallelPointCloudDomain) = True()
 
-    # Calculate avg and min distances between points
-    idxs_y, dists_y = knn(kdtree, medusa_data, 2, true)
-    dx_avg = mean(dists_y)[2]
-    dx_min = minimum(dists_y)[2]
+# Primary constructor for MPI-aware PointCloudDomain
+function PointCloudDomain(basis::RefPointData{NDIMS},
+                          points::Vector{SVector{NDIMS, Float64}},
+                          boundary_idxs::Vector{Vector{Int}},
+                          boundary_normals::Vector{Vector{SVector{NDIMS, Float64}}},
+                          boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
 
-    # Instantiate PointData with the points and neighbors. The num_points and num_neighbors are automatically computed.
-    return PointData{Dim, Tv, Int}(medusa_data, n_idxs, length(medusa_data), nv, dx_min,
-                                   dx_avg)
+    # TODO: MPI, create nice interface for a parallel tree/mesh
+    if mpi_isparallel()
+        # TreeType = ParallelTree{NDIMS}
+        return ParallelPointCloudDomain(basis, points, boundary_idxs, boundary_normals,
+                                        boundary_names_dict)
+    else
+        # TreeType = SerialTree{NDIMS}
+        return SerialPointCloudDomain(basis, points, boundary_idxs, boundary_normals,
+                                      boundary_names_dict)
+    end
+
+    # Create mesh
+    # mesh = @trixi_timeit timer() "creation" TreeMesh{NDIMS, TreeType}(n_cells_max,
+    #                                                                   domain_center,
+    #                                                                   domain_length,
+    #                                                                   periodicity)
+
+    # # Initialize mesh
+    # initialize!(mesh, initial_refinement_level, refinement_patches, coarsening_patches)
+
+    # return mesh
 end
-
-struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
-    idx::Vector{Ti}       # Indices of boundary points
-    normals::Vector{Tv}   # Normals at boundary points
-end
-
-# struct PointCloudDomain{Dim, Tv, Ti}
-#     pd::PointData{Dim, Tv, Ti}  # Encapsulates points and neighbors
-#     boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}  # Boundary data
-# end
-### Actual PointCloudDomain for dispatching problems with 
-struct PointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
-    pd::PointDataT
-    boundary_tags::BoundaryFaceT
-    unsaved_changes::Bool # Required for SaveSolutionCallback
-end
-
-# Workaround so other calls to PointCloudDomain will still work
-function PointCloudDomain(pd::PointData{NDIMS, Tv, Ti},
-                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {NDIMS,
-                                                                                    Tv, Ti}
-    return PointCloudDomain{NDIMS, PointData{NDIMS, Tv, Ti},
-                            Dict{Symbol, BoundaryData{Ti, Tv}}}(pd, boundary_tags, false)
-end
-
-function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
-                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
-                                                                                    N,
-                                                                                    Tv <:
-                                                                                    SVector{N,
-                                                                                            Float64},
-                                                                                    Ti
-                                                                                    }
-    pointData = PointData(points, neighbors)  # Create an instance of PointData
-    return PointCloudDomain(pointData,
-                            boundary_tags, false)
-end
-
-Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
 
 # function Base.show(io::IO,
 #                    mesh::PointCloudDomain{NDIMS, MeshType}) where {NDIMS, MeshType}
@@ -90,12 +57,15 @@ Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
 #     print(io, "$MeshType PointCloudDomain with NDIMS = $NDIMS.")
 # end
 
-function Base.show(io::IO, mesh::PointCloudDomain{Dim, Tv, Ti}) where {Dim, Tv, Ti}
+function Base.show(io::IO,
+                   mesh::Union{PointCloudDomain{Dim, Tv, Ti},
+                               ParallelPointCloudDomain{Dim, Tv, Ti}}) where {Dim, Tv, Ti}
     print(io, "PointCloudDomain with NDIMS = $Dim")
 end
 
 function Base.show(io::IO, ::MIME"text/plain",
-                   mesh::PointCloudDomain{Dim, Tv, Ti}) where {Dim, Tv, Ti}
+                   mesh::Union{PointCloudDomain{Dim, Tv, Ti},
+                               ParallelPointCloudDomain{Dim, Tv, Ti}}) where {Dim, Tv, Ti}
     if get(io, :compact, false)
         show(io, mesh)
     else

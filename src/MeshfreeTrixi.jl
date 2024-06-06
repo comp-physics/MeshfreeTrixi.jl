@@ -11,11 +11,11 @@ module MeshfreeTrixi
 # Include other packages that are used in MeshfreeTrixi.jl
 # (standard library packages first, other packages next, all of them sorted alphabetically)
 
-# using LinearAlgebra: LinearAlgebra, Diagonal, diag, dot, mul!, norm, cross, normalize, I,
-#                      UniformScaling, det
-# using Printf: @printf, @sprintf, println
-# using SparseArrays: AbstractSparseMatrix, AbstractSparseMatrixCSC, sparse, droptol!,
-#                     rowvals, nzrange, nonzeros, spzeros
+using LinearAlgebra: LinearAlgebra, Diagonal, diag, dot, mul!, norm, cross, normalize, I,
+                     UniformScaling, det
+using Printf: @printf, @sprintf, println
+using SparseArrays: AbstractSparseMatrix, AbstractSparseMatrixCSC, sparse, droptol!,
+                    rowvals, nzrange, nonzeros, spzeros
 
 # import @reexport now to make it available for further imports/exports
 using Reexport: @reexport
@@ -116,7 +116,7 @@ using TimerOutputs: TimerOutputs, @notimeit, TimerOutput, print_timer, reset_tim
 @reexport using SimpleUnPack: @unpack
 using SimpleUnPack: @pack!
 using NaNMath
-using Printf: @printf, @sprintf
+# using Printf: @printf, @sprintf, println
 using WriteVTK: vtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
 using IterativeSolvers
 import Base: *

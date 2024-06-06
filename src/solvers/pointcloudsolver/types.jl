@@ -133,12 +133,15 @@ end
 function PointCloudDomain(solver::PointCloudSolver{NDIMS},
                           filename::String,
                           boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
-    medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
-    pd = PointData(medusa_data, solver.basis)
-    boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
-                         for (name, idx) in boundary_names_dict)
-    return PointCloudDomain(solver, pd,
-                            boundary_tags)
+    # medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
+    # pd = PointData(medusa_data, solver.basis)
+    # boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
+    #                      for (name, idx) in boundary_names_dict)
+    # return PointCloudDomain(solver, pd,
+    #                         boundary_tags)
+
+    return PointCloudDomain(solver.basis, medusa_data, boundary_idxs, boundary_normals,
+                            boundary_names_dict)
 end
 
 # No checks for these meshes yet available

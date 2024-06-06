@@ -86,6 +86,7 @@ function squeeze(message, max_width; filler::Char = '…')
 end
 
 # Print a summary with a box around it with a given heading and a setup of key=>value pairs
+# Replace with original Trixi def that is MPI-aware
 function summary_box(io::IO, heading, setup = [])
     summary_header(io, heading)
     for (key, value) in setup
