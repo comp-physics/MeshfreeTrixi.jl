@@ -38,13 +38,10 @@ end
 
 # Main function for instantiating all the necessary data for a SerialPointCloudDomain
 function SerialPointCloudDomain(basis::RefPointData{NDIMS},
-                                points::Vector{SVector{NDIMS, Float64}},
-                                boundary_idxs::Vector{Vector{Int}},
-                                boundary_normals::Vector{Vector{SVector{NDIMS,
-                                                                        Float64}}},
+                                filename::String,
                                 boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
     medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
-    pd = PointData(medusa_data, solver.basis)
+    pd = PointData(medusa_data, basis)
     boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
                          for (name, idx) in boundary_names_dict)
     return PointCloudDomain(pd,
