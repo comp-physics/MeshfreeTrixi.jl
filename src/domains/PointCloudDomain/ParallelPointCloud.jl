@@ -108,7 +108,7 @@ function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
     num_procs = mpi_nranks()
     local_points, local_to_global_idx,
     halo_points, halo_global, halo_proc, halo_global_to_local_idx,
-    boundary_global, boundary_normals, boundary_idxs,
+    boundary_global, boundary_normals_local, boundary_local_idxs,
     boundary_halo_global, boundary_normals_halo, boundary_halo_idxs,
     send_id, recv_id, send_idx, recv_length, dx_min, dx_avg = preprocess(filename,
                                                                          2 * basis.nv,
@@ -122,6 +122,14 @@ function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
 
     points = vcat(local_points, halo_points)
     pd = PointData(points, solver.basis, dx_min, dx_avg)
+
+    # Combine boundary data
+    boundary_idxs = deepcopy(boundary_local_idxs)
+    boundary_normals = deepcopy(boundary_normals_local)
+    for i in eachindex(boundary_idxs)
+        append!(boundary_idxs[i], boundary_halo_idxs[i])
+        append!(boundary_normals[i], boundary_normals_halo[i])
+    end
     boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
                          for (name, idx) in boundary_names_dict)
     return ParallelPointCloudDomain(pd,
