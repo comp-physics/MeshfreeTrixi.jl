@@ -157,10 +157,10 @@ function initialize_info_callback(cb::DiscreteCallback, u, t, integrator;
     # The summary callback should only print information on the root process.
     # However, all other MPI processes should also reset the timer so that
     # it can be used to diagnose performance.
-    # if !mpi_isroot()
-    #     reset_timer!(timer())
-    #     return nothing
-    # end
+    if !mpi_isroot()
+        reset_timer!(timer())
+        return nothing
+    end
 
     print_startup_message()
 
@@ -237,7 +237,7 @@ function (cb::DiscreteCallback{Condition, Affect!})(io::IO = stdout) where {Cond
                                                                             Affect! <:
                                                                             typeof(info_callback)
                                                                             }
-    # mpi_isroot() || return nothing
+    mpi_isroot() || return nothing
 
     TimerOutputs.complement!(timer())
     print_timer(io, timer(), title = "MeshfreeTrixi.jl",

@@ -6,6 +6,11 @@
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
 @muladd begin
 #! format: noindent
+# iteration over all elements in a domain
+@inline function Trixi.ndofs(domain::ParallelPointCloudDomain, solver::PointCloudSolver,
+                             other_args...)
+    domain.pd.mpi.num_glocal_points
+end
 
 # Constructs cache variables for ParallelPointCloudDomains
 # So far no changes from regular PointCloudSolver cache
