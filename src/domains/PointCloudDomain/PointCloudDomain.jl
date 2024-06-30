@@ -12,6 +12,9 @@ for a point cloud domain. Includes specialization for MPI parallelism.
 # end
 
 include("SerialPointCloud.jl")
+# MPI-based PointCloudDomain
+include("scatter_pointcloud.jl")
+include("partition_domain.jl")
 include("ParallelPointCloud.jl")
 
 # const SerialPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:SerialPointCloud{NDIMS}}

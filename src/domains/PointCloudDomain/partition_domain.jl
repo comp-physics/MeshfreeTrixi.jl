@@ -59,7 +59,8 @@ function partition_domain(casename, n, num_procs)
     # Find single nearest neighbor for each Y point
     idxs_y_x, dists_y_x = knn(hnsw_x, Y, 1)
     # Calculate avg and min distances between points
-    _, dists_g = knn(kdtree, medusa_data, 2, true)
+    _, dists_g = knn(hnsw_x, X, 2, true)
+    num_glocal_points = length(X)
     dx_avg = mean(dists_g)[2]
     dx_min = minimum(dists_g)[2]
 
@@ -322,7 +323,7 @@ function partition_domain(casename, n, num_procs)
            send_id, recv_id, send_idx, recv_length,
            boundary_local, boundary_normals_local, boundary_local_idx,
            boundary_halo, boundary_normals_halo, boundary_halo_idx,
-           dx_min, dx_avg
+           dx_min, dx_avg, num_glocal_points
 end
 
 """
@@ -430,14 +431,17 @@ function preprocess(casename, n, num_procs)
 
     ### partition_domain with function
     if rank == 0
+        dx_min = 0.0
+        dx_avg = 0.0
+        num_global_points = 0
         X_partition, Y_partition, idxs_x_global_partition, idxs_y_x_global_partition,
         local_to_global_idx_partition, global_to_local_idx,
         halo_points_partition, halo_partition, halo_proc_partition, halo_global_to_local_idx_partition,
         send_id_p, recv_id_p, send_idx_p, recv_length_p,
         boundary_partition, boundary_normals_partition, boundary_idx_partition,
-        boundary_halo_partition, boundary_normals_halo_partition, boundary_halo_idx_partition, dx_min, dx_avg = partition_domain(casename,
-                                                                                                                                 n,
-                                                                                                                                 num_procs)
+        boundary_halo_partition, boundary_normals_halo_partition, boundary_halo_idx_partition, dx_min, dx_avg, num_global_points = partition_domain(casename,
+                                                                                                                                                    n,
+                                                                                                                                                    num_procs)
     else
         X_partition = Vector{Vector{SVector{2, Float64}}}(undef, 1)
         local_to_global_idx_partition = Vector{Vector{Int64}}(undef, 1)
@@ -456,7 +460,18 @@ function preprocess(casename, n, num_procs)
         recv_id_p = Vector{Vector{Int64}}(undef, 1)
         send_idx_p = Vector{Vector{Vector{Int64}}}(undef, 1)
         recv_length_p = Vector{Vector{Int64}}(undef, 1)
+        dx_min = 0.0
+        dx_avg = 0.0
+        num_global_points = 0
     end
+
+    # Broadcast dx_min, dx_avg, num_global_points
+    # println(typeof(dx_min))
+    # println(typeof(dx_avg))
+    # println(typeof(num_global_points))
+    dx_min = MPI.bcast(dx_min, comm)
+    dx_avg = MPI.bcast(dx_avg, comm)
+    num_global_points = MPI.bcast(num_global_points, comm)
 
     ### Scatter data to processors with MPI.jl 
     X, local_to_global_idx,
@@ -484,5 +499,5 @@ function preprocess(casename, n, num_procs)
            halo_points, halo_global, halo_proc, halo_global_to_local_idx,
            boundary_global, boundary_normals, boundary_idx,
            boundary_halo_global, boundary_normals_halo, boundary_halo_idx,
-           send_id, recv_id, send_idx, recv_length, dx_min, dx_avg
+           send_id, recv_id, send_idx, recv_length, dx_min, dx_avg, num_global_points
 end

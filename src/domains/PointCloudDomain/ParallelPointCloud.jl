@@ -110,18 +110,19 @@ function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
     halo_points, halo_global, halo_proc, halo_global_to_local_idx,
     boundary_global, boundary_normals_local, boundary_local_idxs,
     boundary_halo_global, boundary_normals_halo, boundary_halo_idxs,
-    send_id, recv_id, send_idx, recv_length, dx_min, dx_avg = preprocess(filename,
-                                                                         2 * basis.nv,
-                                                                         num_procs)
+    send_id, recv_id, send_idx, recv_length, dx_min, dx_avg, num_global_points = preprocess(filename,
+                                                                                            2 *
+                                                                                            basis.nv,
+                                                                                            num_procs)
 
     num_local_points = length(local_points)
     num_halo_points = length(halo_points)
 
     mpi_cache = MPICache(real(basis), send_id, recv_id, send_idx, recv_length,
-                         num_local_points, num_glocal_points)
+                         num_local_points, num_global_points)
 
     points = vcat(local_points, halo_points)
-    pd = PointData(points, solver.basis, dx_min, dx_avg)
+    pd = PointData(points, basis, dx_min, dx_avg)
 
     # Combine boundary data
     boundary_idxs = deepcopy(boundary_local_idxs)
