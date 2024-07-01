@@ -63,10 +63,11 @@ end
 #     boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}  # Boundary data
 # end
 ### Actual ParallelPointCloudDomain for dispatching problems with 
-struct ParallelPointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
+struct ParallelPointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT} <:
+       PointCloudDomain{NDIMS}
     pd::PointDataT
     boundary_tags::BoundaryFaceT
-    mpi::MPICache
+    mpi_cache::MPICache
     unsaved_changes::Bool # Required for SaveSolutionCallback
 end
 

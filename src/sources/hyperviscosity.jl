@@ -284,6 +284,8 @@ function update_upwind_visc!(eps_uw, u,
     end
 end
 
+# Need to specialize this for serial and MPI cases
+# MPI requires global residuals
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache)

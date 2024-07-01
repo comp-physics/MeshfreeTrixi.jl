@@ -8,15 +8,15 @@
 #! format: noindent
 # iteration over all elements in a domain
 @inline function Trixi.ndofs(domain::ParallelPointCloudDomain, solver::PointCloudSolver,
-                             other_args...)
-    domain.pd.mpi.num_glocal_points
+    other_args...)
+    domain.mpi_cache.n_elements_global
 end
 
 # Constructs cache variables for ParallelPointCloudDomains
 # So far no changes from regular PointCloudSolver cache
 function Trixi.create_cache(domain::ParallelPointCloudDomain{NDIMS}, equations,
-                            solver::PointCloudSolver, RealT,
-                            uEltype) where {NDIMS}
+    solver::PointCloudSolver, RealT,
+    uEltype) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
 
@@ -35,7 +35,7 @@ function Trixi.create_cache(domain::ParallelPointCloudDomain{NDIMS}, equations,
 
     # local storage for volume integral and source computations
     local_values_threaded = [allocate_nested_array(uEltype, nvars, (pd.num_points,),
-                                                   solver)
+        solver)
                              for _ in 1:Threads.nthreads()]
 
     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
@@ -43,40 +43,40 @@ function Trixi.create_cache(domain::ParallelPointCloudDomain{NDIMS}, equations,
     flux_threaded = [[allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
     rhs_local_threaded = [allocate_nested_array(uEltype, nvars,
-                                                (pd.num_points,), solver)
+        (pd.num_points,), solver)
                           for _ in 1:Threads.nthreads()]
 
     return (; pd, rbf_differentiation_matrices,
-            u_values, u_face_values, flux_face_values,
-            local_values_threaded, flux_threaded, rhs_local_threaded)
+        u_values, u_face_values, flux_face_values,
+        local_values_threaded, flux_threaded, rhs_local_threaded)
 end
 
 function update_halos!(du, u, cache, t, boundary_conditions,
-                       domain::ParallelPointCloudDomain,
-                       have_nonconservative_terms, equations,
-                       solver::PointCloudSolver)
+    domain::ParallelPointCloudDomain,
+    have_nonconservative_terms, equations,
+    solver::PointCloudSolver)
 
     # Unpack required MPI information
     mpi_cache = domain.mpi_cache
     pd = domain.pd
-    @unpack mpi_send_id, mpi_recv_id, mpi_send_idx, mpi_recv_length, mpi_send_buffers, mpi_recv_buffers, mpi_requests, n_elements_global, n_elements_local = mpi_cache
+    @unpack mpi_send_id, mpi_recv_id, halo_send_idx, halo_recv_length, mpi_send_buffers, mpi_recv_buffers, mpi_requests, n_elements_global, n_elements_local = mpi_cache
 
     # Perform p2p communication for halo regions
-    u_local = @view(u[1:n_elements_local, :])
-    halo = @view(u[(n_elements_local + 1):end, :])
+    u_local = @view(u[1:n_elements_local])
+    halo = @view(u[(n_elements_local+1):end])
     u_local, halo = perform_halo_update!(u_local, halo, mpi_send_id, mpi_recv_id,
-                                         mpi_send_idx,
-                                         mpi_recv_length, comm)
+        halo_send_idx,
+        halo_recv_length, mpi_comm())
 end
 
 function Trixi.rhs!(du, u, t, domain::ParallelPointCloudDomain, equations,
-                    initial_condition, boundary_conditions::BC, source_terms::Source,
-                    solver::PointCloudSolver, cache) where {BC, Source}
+    initial_condition, boundary_conditions::BC, source_terms::Source,
+    solver::PointCloudSolver, cache) where {BC,Source}
     @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, solver, cache)
 
     @trixi_timeit timer() "update halos" begin
         update_halos!(du, u, cache, t, boundary_conditions, domain,
-                      have_nonconservative_terms(equations), equations, solver)
+            have_nonconservative_terms(equations), equations, solver)
     end
 
     # Require two passes for strongly imposed BCs
@@ -84,13 +84,13 @@ function Trixi.rhs!(du, u, t, domain::ParallelPointCloudDomain, equations,
     # second sets du to zero
     @trixi_timeit timer() "boundary flux" begin
         calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-                            have_nonconservative_terms(equations), equations, solver)
+            have_nonconservative_terms(equations), equations, solver)
     end
 
     @trixi_timeit timer() "calc fluxes" begin
         calc_fluxes!(du, u, domain,
-                     have_nonconservative_terms(equations), equations,
-                     solver.engine, solver, cache)
+            have_nonconservative_terms(equations), equations,
+            solver.engine, solver, cache)
     end
 
     @trixi_timeit timer() "source terms" begin
@@ -101,7 +101,7 @@ function Trixi.rhs!(du, u, t, domain::ParallelPointCloudDomain, equations,
     # second sets du to zero
     @trixi_timeit timer() "boundary flux" begin
         calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-                            have_nonconservative_terms(equations), equations, solver)
+            have_nonconservative_terms(equations), equations, solver)
     end
 
     return nothing
