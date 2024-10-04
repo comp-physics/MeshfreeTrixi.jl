@@ -59,7 +59,7 @@ StrideArrays = "0.1"
 StructArrays = "0.6"
 Symbolics = "5"
 TimerOutputs = "0.5"
-Trixi = "0.6, 0.7.6"
+Trixi = "0.6 - 0.7.5"
 WriteVTK = "1"
 julia = "1"
 
