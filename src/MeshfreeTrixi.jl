@@ -33,7 +33,7 @@ using Trixi: init_mpi, mpi_comm,
              mpi_print, ode_norm, recursive_sum_abs2, recursive_length, ode_unstable_check,
              ode_default_options
 
-import Trixi: rhs!
+import Trixi: rhs!, ode_norm
 
 # Trixi Dependencies
 # # MPI needs to be imported before HDF5 to be able to use parallel HDF5

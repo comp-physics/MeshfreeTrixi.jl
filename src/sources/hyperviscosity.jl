@@ -332,7 +332,8 @@ function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter)
     for i in eachindex(eps)
         if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
             if isnan(eps_uw[i]) || isinf(eps_uw[i])
-                eps[i] = eps()
+                # println("eps():", Base.eps())
+                eps[i] = Base.eps()
                 eps_c[i] = 2.0
             else
                 eps[i] = eps_uw[i]

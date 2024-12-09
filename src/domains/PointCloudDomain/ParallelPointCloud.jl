@@ -11,14 +11,15 @@ mutable struct MPICache{uEltype <: Real}
     halo_recv_length::Vector{Int}
     # mpi_neighbor_interfaces::Vector{Vector{Int}}
     # mpi_neighbor_mortars::Vector{Vector{Int}}
-    mpi_send_buffers::Vector{Vector{uEltype}}
-    mpi_recv_buffers::Vector{Vector{uEltype}}
+    mpi_send_buffers::Vector{Vector{SVector{4, uEltype}}}
+    mpi_recv_buffers::Vector{Vector{SVector{4, uEltype}}}
     # mpi_send_requests::Vector{MPI.Request}
     # mpi_recv_requests::Vector{MPI.Request}
     mpi_requests::Vector{MPI.Request}
     # n_elements_by_rank::OffsetArray{Int, 1, Array{Int, 1}}
     n_elements_local::Int
     n_elements_global::Int
+    comm::MPI.Comm
     # first_element_global_id::Int
 end
 
@@ -26,9 +27,14 @@ function MPICache(uEltype, mpi_send_id::Vector{Int}, mpi_recv_id::Vector{Int},
                   halo_send_idx::Vector{Vector{Int}}, halo_recv_length::Vector{Int},
                   n_elements_local::Int, n_elements_global::Int)
     # MPI communication "just works" for bitstypes only
+    # SVectors of bitstypes are bitstypes
     if !isbitstype(uEltype)
         throw(ArgumentError("MPICache only supports bitstypes, $uEltype is not a bitstype."))
     end
+
+    # For initializing send and recv buffers we 
+    # should already know how many elements to expect
+
     # mpi_neighbor_ranks = Vector{Int}(undef, 0)
     # mpi_send_id = Vector{Int}(undef, 0)
     # mpi_recv_id = Vector{Int}(undef, 0)
@@ -36,8 +42,12 @@ function MPICache(uEltype, mpi_send_id::Vector{Int}, mpi_recv_id::Vector{Int},
     # halo_recv_length = Vector{Int}(undef, 0)
     # mpi_neighbor_interfaces = Vector{Vector{Int}}(undef, 0)
     # mpi_neighbor_mortars = Vector{Vector{Int}}(undef, 0)
-    mpi_send_buffers = Vector{Vector{uEltype}}(undef, 0)
-    mpi_recv_buffers = Vector{Vector{uEltype}}(undef, 0)
+
+    # Send and Recv buffers cannot be Vectors of StructArrays as 
+    # they will not work with MPI.Buffer 
+    # We need intermediate storage of Vector{Vector{SVector}}
+    mpi_send_buffers = Vector{Vector{SVector{4, uEltype}}}(undef, 0)
+    mpi_recv_buffers = Vector{Vector{SVector{4, uEltype}}}(undef, 0)
     # mpi_send_requests = Vector{MPI.Request}(undef, 0)
     # mpi_recv_requests = Vector{MPI.Request}(undef, 0)
     mpi_requests = Vector{MPI.Request}(undef, 0)
@@ -46,9 +56,18 @@ function MPICache(uEltype, mpi_send_id::Vector{Int}, mpi_recv_id::Vector{Int},
     # n_elements_global = 0
     # first_element_global_id = 0
 
+    # Resize buffers to [neighbors][elements_per_neighbor]
+    for i in 1:length(mpi_send_id)
+        push!(mpi_send_buffers,
+              Vector{SVector{4, uEltype}}(undef, length(halo_send_idx[i])))
+        push!(mpi_recv_buffers, Vector{SVector{4, uEltype}}(undef, halo_recv_length[i]))
+    end
+
+    comm = MPI.COMM_WORLD
+
     MPICache{uEltype}(mpi_send_id, mpi_recv_id, halo_send_idx, halo_recv_length,
                       mpi_send_buffers, mpi_recv_buffers, mpi_requests,
-                      n_elements_local, n_elements_global)
+                      n_elements_local, n_elements_global, comm)
 end
 @inline Base.eltype(::MPICache{uEltype}) where {uEltype} = uEltype
 

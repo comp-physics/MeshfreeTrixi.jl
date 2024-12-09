@@ -1,7 +1,8 @@
 # using MPI, StaticArrays
 
 # For scattering points
-function scatter_data(data::Vector{Vector{SVector{2,T}}}, root::Int=0) where {T<:Number}
+function scatter_data(data::Vector{Vector{SVector{2, T}}},
+                      root::Int = 0) where {T <: Number}
     # MPI.Init()
 
     comm = MPI.COMM_WORLD
@@ -21,7 +22,7 @@ function scatter_data(data::Vector{Vector{SVector{2,T}}}, root::Int=0) where {T<
         # sendcounts = length.(data) .* length(data[1][1])
         sendcounts = length.(data) .* 2
         sendcount_buf = MPI.UBuffer(sendcounts, 1)
-        displs = vcat(0, cumsum(sendcounts[1:end-1]))
+        displs = vcat(0, cumsum(sendcounts[1:(end - 1)]))
         sendbuf = MPI.VBuffer(sendbuf, sendcounts, displs)
     else
         sendbuf = nothing
@@ -52,7 +53,7 @@ function scatter_data(data::Vector{Vector{SVector{2,T}}}, root::Int=0) where {T<
     recvbuf = MPI.Buffer(recvbuf)
 
     # Scatter the data
-    MPI.Scatterv!(sendbuf, recvbuf, comm; root=root)
+    MPI.Scatterv!(sendbuf, recvbuf, comm; root = root)
 
     # Plot the received data
     # for i = 0:num_processes-1
@@ -64,7 +65,7 @@ function scatter_data(data::Vector{Vector{SVector{2,T}}}, root::Int=0) where {T<
     # end
 
     # Convert back to SVectors after receiving
-    recvdata = [SVector{2,T}(recvbuf.data[:, i]) for i in 1:recvcount_col]
+    recvdata = [SVector{2, T}(recvbuf.data[:, i]) for i in 1:recvcount_col]
 
     # for i = 0:num_processes-1
     #     if rank == i
@@ -79,7 +80,7 @@ function scatter_data(data::Vector{Vector{SVector{2,T}}}, root::Int=0) where {T<
 end
 
 # For scattering indices
-function scatter_data(data::Vector{Vector{T}}, root::Int=0) where {T<:Number}
+function scatter_data(data::Vector{Vector{T}}, root::Int = 0) where {T <: Number}
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
     num_processes = MPI.Comm_size(comm)
@@ -89,7 +90,7 @@ function scatter_data(data::Vector{Vector{T}}, root::Int=0) where {T<:Number}
         sendbuf = hcat(sendbufs...)
         sendcounts = length.(data)
         sendcount_buf = MPI.UBuffer(sendcounts, 1)
-        displs = vcat(0, cumsum(sendcounts[1:end-1]))
+        displs = vcat(0, cumsum(sendcounts[1:(end - 1)]))
         sendbuf = MPI.VBuffer(sendbuf, sendcounts, displs)
     else
         sendbuf = nothing
@@ -113,7 +114,7 @@ function scatter_data(data::Vector{Vector{T}}, root::Int=0) where {T<:Number}
     # end
     recvbuf = MPI.Buffer(recvbuf)
 
-    MPI.Scatterv!(sendbuf, recvbuf, comm; root=root)
+    MPI.Scatterv!(sendbuf, recvbuf, comm; root = root)
 
     # for i = 0:num_processes-1
     #     if rank == i
@@ -135,7 +136,7 @@ function scatter_data(data::Vector{Vector{T}}, root::Int=0) where {T<:Number}
 end
 
 # For scattering neighbor indices
-function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Number}
+function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int = 0) where {T <: Number}
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
     num_processes = MPI.Comm_size(comm)
@@ -145,7 +146,7 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
         sendbufs = vcat([vcat(inner_vec...) for inner_vec in data]...)
         sendcounts = [length(vcat(inner_vec...)) for inner_vec in data]
         sendcount_buf = MPI.UBuffer(sendcounts, 1)
-        displs = vcat(0, cumsum(sendcounts[1:end-1]))
+        displs = vcat(0, cumsum(sendcounts[1:(end - 1)]))
         sendbuf = MPI.VBuffer(sendbufs, sendcounts, displs)
         # Scatter for reconstructing inner vectors
         pointcounts = length.(data)
@@ -153,8 +154,9 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
         innercounts = [length.(data[i]) for i in eachindex(data)]
         innercounts_flat = vcat(innercounts...)
         innercounts_counts = length.(innercounts)
-        innercounts_displs = vcat(0, cumsum(innercounts_counts[1:end-1]))
-        innercounts_buf = MPI.VBuffer(innercounts_flat, innercounts_counts, innercounts_displs)
+        innercounts_displs = vcat(0, cumsum(innercounts_counts[1:(end - 1)]))
+        innercounts_buf = MPI.VBuffer(innercounts_flat, innercounts_counts,
+                                      innercounts_displs)
         # innercounts_buf = MPI.UBuffer(vcat(innercounts...), 1)
     else
         sendbuf = nothing
@@ -180,7 +182,7 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
     # end
     recvbuf = MPI.Buffer(recvbuf)
 
-    MPI.Scatterv!(sendbuf, recvbuf, comm; root=root)
+    MPI.Scatterv!(sendbuf, recvbuf, comm; root = root)
 
     # for i = 0:num_processes-1
     #     if rank == i
@@ -193,7 +195,7 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
     pointcounts_recv = MPI.Scatter(pointcounts_buf, Int64, root, comm)
     innercounts_recv = Array{Int64}(undef, pointcounts_recv)
     innercounts_recv = MPI.Buffer(innercounts_recv)
-    MPI.Scatterv!(innercounts_buf, innercounts_recv, comm; root=root)
+    MPI.Scatterv!(innercounts_buf, innercounts_recv, comm; root = root)
     # for i = 0:num_processes-1
     #     if rank == i
     #         println("Process $rank received ", innercounts_recv.data)
@@ -207,7 +209,7 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
     idx = 1
     recvdata = Vector{Vector{T}}(undef, length(innercounts_recv.data))
     for i in 1:length(innercounts_recv.data)
-        recvdata[i] = recvbuf.data[idx:(idx+innercounts_recv.data[i]-1)]
+        recvdata[i] = recvbuf.data[idx:(idx + innercounts_recv.data[i] - 1)]
         idx += innercounts_recv.data[i]
     end
 
@@ -222,21 +224,23 @@ function scatter_data(data::Vector{Vector{Vector{T}}}, root::Int=0) where {T<:Nu
 end
 
 # For scattering boundary normals, SVector{2, Float64}
-function scatter_data(data::Vector{Vector{Vector{SVector{2,T}}}}, root::Int=0) where {T<:Number}
+function scatter_data(data::Vector{Vector{Vector{SVector{2, T}}}},
+                      root::Int = 0) where {T <: Number}
     comm = MPI.COMM_WORLD
     rank = MPI.Comm_rank(comm)
     num_processes = MPI.Comm_size(comm)
 
     if rank == root
         # Convert each SVector to a Vector and create a matrix from the vectors
-        sendbufs = [hcat([convert(Vector, v) for v in inner_inner_vec]...) for inner_vec in data for inner_inner_vec in inner_vec]
+        sendbufs = [hcat([convert(Vector, v) for v in inner_inner_vec]...)
+                    for inner_vec in data for inner_inner_vec in inner_vec]
         # Concatenate all matrices into one matrix
         filtered_sendbufs = filter(x -> !isempty(x), sendbufs)
         sendbuf = hcat(filtered_sendbufs...)
         # sendcounts = [length(vcat(inner_vec...)) for inner_vec in data] .* length(data[1][1][1])
         sendcounts = [length(vcat(inner_vec...)) for inner_vec in data] .* 2
         sendcount_buf = MPI.UBuffer(sendcounts, 1)
-        displs = vcat(0, cumsum(sendcounts[1:end-1]))
+        displs = vcat(0, cumsum(sendcounts[1:(end - 1)]))
         sendbuf = MPI.VBuffer(sendbuf, sendcounts, displs)
         # Scatter for reconstructing inner vectors
         pointcounts = length.(data)
@@ -244,8 +248,9 @@ function scatter_data(data::Vector{Vector{Vector{SVector{2,T}}}}, root::Int=0) w
         innercounts = [length.(data[i]) for i in eachindex(data)]
         innercounts_flat = vcat(innercounts...)
         innercounts_counts = length.(innercounts)
-        innercounts_displs = vcat(0, cumsum(innercounts_counts[1:end-1]))
-        innercounts_buf = MPI.VBuffer(innercounts_flat, innercounts_counts, innercounts_displs)
+        innercounts_displs = vcat(0, cumsum(innercounts_counts[1:(end - 1)]))
+        innercounts_buf = MPI.VBuffer(innercounts_flat, innercounts_counts,
+                                      innercounts_displs)
         # innercounts_buf = MPI.UBuffer(vcat(innercounts...), 1)
     else
         sendbuf = nothing
@@ -275,7 +280,7 @@ function scatter_data(data::Vector{Vector{Vector{SVector{2,T}}}}, root::Int=0) w
     # end
     recvbuf = MPI.Buffer(recvbuf)
 
-    MPI.Scatterv!(sendbuf, recvbuf, comm; root=root)
+    MPI.Scatterv!(sendbuf, recvbuf, comm; root = root)
 
     # for i = 0:num_processes-1
     #     if rank == i
@@ -288,7 +293,7 @@ function scatter_data(data::Vector{Vector{Vector{SVector{2,T}}}}, root::Int=0) w
     pointcounts_recv = MPI.Scatter(pointcounts_buf, Int64, root, comm)
     innercounts_recv = Array{Int64}(undef, pointcounts_recv)
     innercounts_recv = MPI.Buffer(innercounts_recv)
-    MPI.Scatterv!(innercounts_buf, innercounts_recv, comm; root=root)
+    MPI.Scatterv!(innercounts_buf, innercounts_recv, comm; root = root)
     # for i = 0:num_processes-1
     #     if rank == i
     #         println("Process $rank received ", innercounts_recv.data)
@@ -304,9 +309,11 @@ function scatter_data(data::Vector{Vector{Vector{SVector{2,T}}}}, root::Int=0) w
     #     idx += innercounts_recv.data[i]
     # end
     idx = 1
-    recvdata = Vector{Vector{SVector{2,T}}}(undef, length(innercounts_recv.data))
+    recvdata = Vector{Vector{SVector{2, T}}}(undef, length(innercounts_recv.data))
     for i in 1:length(innercounts_recv.data)
-        recvdata[i] = [SVector{2,T}(recvbuf.data[1, idx+step], recvbuf.data[2, idx+step]) for step in 0:(innercounts_recv.data[i]-1)]
+        recvdata[i] = [SVector{2, T}(recvbuf.data[1, idx + step],
+                                     recvbuf.data[2, idx + step])
+                       for step in 0:(innercounts_recv.data[i] - 1)]
         idx += innercounts_recv.data[i]
     end
 
