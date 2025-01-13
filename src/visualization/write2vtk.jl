@@ -117,21 +117,31 @@ function trixi2vtk(u_ode, semi, t; iter = nothing, output_directory = "out", pre
 
     filenames = system_names(systems)
 
-    foreach_system(systems) do system
-        system_index = system_indices(system, systems)
+    # foreach_system(systems) do system
+    #     system_index = system_indices(system, systems)
 
-        u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
+    #     u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
 
-        trixi2vtk(u, t, system, semi;
-                  output_directory = output_directory,
-                  system_name = filenames[system_index], iter = iter, prefix = prefix,
-                  write_meta_data = write_meta_data, max_coordinates = max_coordinates,
-                  custom_quantities...)
-    end
+    #     trixi2vtk(u, t, system, semi;
+    #               output_directory = output_directory,
+    #               system_name = filenames[system_index], iter = iter, prefix = prefix,
+    #               write_meta_data = write_meta_data, max_coordinates = max_coordinates,
+    #               custom_quantities...)
+    # end
+
+    # system_index = system_indices(system, systems)
+
+    u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
+
+    trixi2vtk(u, t, systems, semi;
+              output_directory = output_directory,
+              system_name = filenames[1], iter = iter, prefix = prefix,
+              write_meta_data = write_meta_data, max_coordinates = max_coordinates,
+              custom_quantities...)
 end
 
 # Convert data for a single TrixiParticle system to VTK format
-function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
+function trixi2vtk(u, t, systems, semi; output_directory = "out", prefix = "",
                    iter = nothing, system_name = vtkname(system), write_meta_data = true,
                    max_coordinates = Inf,
                    custom_quantities...)
@@ -164,10 +174,20 @@ function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
         end
     end
 
-    save_tag = string(nameof(typeof(system)))
     vtk_grid(file, points, cells) do vtk
-        @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
-                                                          write_meta_data = write_meta_data)
+        foreach_system(systems) do system
+            save_tag = string(nameof(typeof(system)))
+            @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                              write_meta_data = write_meta_data)
+
+            # Extract custom quantities for this system
+            # for (key, quantity) in custom_quantities
+            #     value = custom_quantity(quantity, u, t, system)
+            #     if value !== nothing
+            #         vtk[string(key)] = value
+            #     end
+            # end
+        end
 
         # Store particle index
         vtk["index"] = eachelement(semi.mesh, semi.solver, semi.cache)
@@ -177,14 +197,6 @@ function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
         if write_meta_data
             vtk["solver_version"] = get_git_hash()
             vtk["julia_version"] = string(VERSION)
-        end
-
-        # Extract custom quantities for this system
-        for (key, quantity) in custom_quantities
-            value = custom_quantity(quantity, u, t, system)
-            if value !== nothing
-                vtk[string(key)] = value
-            end
         end
 
         # Add to collection
