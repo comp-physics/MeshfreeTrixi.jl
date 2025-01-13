@@ -17,6 +17,97 @@ function Trixi.ode_norm(u::SVector, t)
     local_length = recursive_length(u)    # length(u)
     return sqrt(local_sumabs2 / local_length)
 end
+# function ode_norm(u::AbstractArray, t)
+#     local_sumabs2 = recursive_sum_abs2(u) # sum(abs2, u)
+#     local_length = recursive_length(u)    # length(u)
+#     if mpi_isparallel()
+#         global_sumabs2, global_length = MPI.Allreduce([local_sumabs2, local_length], +,
+#             mpi_comm())
+#         # println("Rank: ", MPI.Comm_rank(MPI.COMM_WORLD), " ode_norm allreduce", ", val: ", sqrt(global_sumabs2 / global_length), ", t: ", t)
+#         return sqrt(global_sumabs2 / global_length)
+#     else
+#         return sqrt(local_sumabs2 / local_length)
+#     end
+# end
+
+"""
+    ode_mean(u)
+
+Implementation of geometric mean. This function is aware of MPI and uses
+global MPI communication when running in parallel.
+
+"""
+function ode_mean(u::AbstractArray)
+    local_sum = sum(u)
+    local_length = recursive_length(u)
+    # println("Rank: ", MPI.Comm_rank(MPI.COMM_WORLD), " local_sum: ", local_sum, ", local_length: ", local_length)
+    if mpi_isparallel()
+        global_sum = MPI.Allreduce([local_sum], +, mpi_comm())[1]
+        global_length = MPI.Allreduce([local_length], +, mpi_comm())[1]
+        # println("Rank: ", MPI.Comm_rank(MPI.COMM_WORLD), " global_sum: ", global_sum, ", global_length: ", global_length, ", mean: ", global_sum / global_length)
+        return global_sum / global_length
+    else
+        return local_sum / local_length
+    end
+end
+
+"""
+    ode_maximum(u)
+
+Implementation of maximum. This function is aware of MPI and uses
+global MPI communication when running in parallel.
+
+"""
+function ode_maximum(u::AbstractArray)
+    local_max = maximum(u)
+    if mpi_isparallel()
+        global_max = MPI.Allreduce(local_max, MPI.MAX, mpi_comm())
+        return global_max
+    else
+        return local_max
+    end
+end
+
+function ode_maximum(u::StructArray)
+    local_max = maximum(u)
+    vec_size = length(local_max)
+    local_max = Vector(local_max)
+    if mpi_isparallel()
+        global_max = MPI.Allreduce(local_max, MPI.MAX, mpi_comm())
+        return SVector{vec_size, Float64}(global_max)
+    else
+        return SVector{vec_size, Float64}(local_max)
+    end
+end
+
+"""
+    ode_minimum(u)
+
+Implementation of minimum. This function is aware of MPI and uses
+global MPI communication when running in parallel.
+
+"""
+function ode_minimum(u::AbstractArray)
+    local_min = minimum(u)
+    if mpi_isparallel()
+        global_min = MPI.Allreduce(local_min, MPI.MIN, mpi_comm())
+        return global_min
+    else
+        return local_min
+    end
+end
+
+function ode_minimum(u::StructArray)
+    local_min = minimum(u)
+    vec_size = length(local_min)
+    local_min = Vector(local_min)
+    if mpi_isparallel()
+        global_min = MPI.Allreduce(local_min, MPI.MIN, mpi_comm())
+        return SVector{vec_size, Float64}(global_min)
+    else
+        return SVector{vec_size, Float64}(local_min)
+    end
+end
 
 """
     perform_halo_update!(u::Union{Array{Float64,1},SubArray{Float64,1}}, halo::Union{Array{Float64,1},SubArray{Float64,1}}, send_id, recv_id, send_idx, recv_length, comm)
@@ -134,7 +225,7 @@ function perform_halo_update!(u::T, halo::T,
     mpi_recv_buffers = mpi_cache.mpi_recv_buffers
     displs = [0; cumsum(recv_length)[1:(end - 1)]]
     reqs = MPI.Request[]
-    println("Rank ", MPI.Comm_rank(comm), " performing halo update...")
+    # println("Rank ", MPI.Comm_rank(comm), " performing halo update...")
     for i in eachindex(send_id)
         send_buffer = mpi_send_buffers[i]
         recv_buffer = mpi_recv_buffers[i]
@@ -155,11 +246,11 @@ function perform_halo_update!(u::T, halo::T,
         # if MPI.Comm_rank(comm) == 0
         #     println("Rank: ", MPI.Comm_rank(comm), " send to ", send_id[i] - 1, " recv from ", recv_id[i] - 1)
         # end
-        println("Rank: ", MPI.Comm_rank(comm), " send to ", send_id[i] - 1, " recv from ",
-                recv_id[i] - 1)
+        # println("Rank: ", MPI.Comm_rank(comm), " send to ", send_id[i] - 1, " recv from ",
+        #         recv_id[i] - 1)
     end
     MPI.Waitall!(reqs)
-    println("Halo update complete on rank: ", MPI.Comm_rank(comm))
+    # println("Halo update complete on rank: ", MPI.Comm_rank(comm))
 
     return u, halo
 end

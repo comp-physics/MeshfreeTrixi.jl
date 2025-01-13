@@ -302,12 +302,12 @@ function update_residual_visc!(eps_rv, du, u,
 
     @. residual = approx_du - du
     StructArrays.foreachfield(col -> col .= abs.(col), residual)
-    mean_u = mean(u)
+    mean_u = ode_mean(u)
     recursivecopy!(local_u, u)
     for i in eachindex(local_u)
         local_u[i] = abs.(local_u[i] .- mean_u)
     end
-    n_inf_norms = maximum(local_u)
+    n_inf_norms = ode_maximum(local_u)
     n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
     rho_n, m1_n, m2_n, e_n = n_inf_norms
 
