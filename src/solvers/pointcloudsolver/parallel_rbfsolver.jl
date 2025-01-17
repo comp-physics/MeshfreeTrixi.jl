@@ -71,19 +71,34 @@ function update_halos!(du, u, cache, t, boundary_conditions,
                                          halo_recv_length, mpi_cache)
 end
 
+function reset_halos!(du, u, cache, t, boundary_conditions,
+                      domain::ParallelPointCloudDomain,
+                      have_nonconservative_terms, equations,
+                      solver::PointCloudSolver)
+
+    # Unpack required MPI information
+    mpi_cache = domain.mpi_cache
+    pd = domain.pd
+    @unpack mpi_send_id, mpi_recv_id, halo_send_idx, halo_recv_length, mpi_send_buffers, mpi_recv_buffers, mpi_requests, n_elements_global, n_elements_local = mpi_cache
+
+    # Zero out change in halo
+    du_local = @view(du[1:n_elements_local])
+    du_halo = @view(du[(n_elements_local + 1):end])
+
+    @threaded for i in eachindex(du_halo)
+        du_halo[i] = zero(eltype(du_halo))
+    end
+end
+
 function Trixi.rhs!(du, u, t, domain::ParallelPointCloudDomain, equations,
                     initial_condition, boundary_conditions::BC, source_terms::Source,
                     solver::PointCloudSolver, cache) where {BC, Source}
-    println("Rank: ", MPI.Comm_rank(domain.mpi_cache.comm), " t: ", t)
-    println("Rank: ", MPI.Comm_rank(domain.mpi_cache.comm), " reset ∂u/∂t start")
     @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, solver, cache)
-    println("Rank: ", MPI.Comm_rank(domain.mpi_cache.comm), " reset ∂u/∂t complete")
 
     @trixi_timeit timer() "update halos" begin
         update_halos!(du, u, cache, t, boundary_conditions, domain,
                       have_nonconservative_terms(equations), equations, solver)
     end
-    println("Rank: ", MPI.Comm_rank(domain.mpi_cache.comm), " update halos complete")
 
     # Require two passes for strongly imposed BCs
     # First sets u to BC value, 
@@ -108,6 +123,12 @@ function Trixi.rhs!(du, u, t, domain::ParallelPointCloudDomain, equations,
     @trixi_timeit timer() "boundary flux" begin
         calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
                             have_nonconservative_terms(equations), equations, solver)
+    end
+
+    ### Need to zero out halo fluxes so they do not influence timestepper
+    @trixi_timeit timer() "zero halos" begin
+        reset_halos!(du, u, cache, t, boundary_conditions, domain,
+                     have_nonconservative_terms(equations), equations, solver)
     end
 
     return nothing

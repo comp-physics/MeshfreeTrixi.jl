@@ -238,9 +238,9 @@ function perform_halo_update!(u::T, halo::T,
         # recv_buffer .= recv_halo_view
         rreq = MPI.Irecv!(recv_buffer, comm; source = recv_id[i] - 1, tag = 0)
         sreq = MPI.Isend(send_buffer, comm; dest = send_id[i] - 1, tag = 0)
-        for j in 1:length(recv_buffer)
-            recv_halo_view[j] = recv_buffer[j]
-        end
+        # for j in 1:length(recv_buffer)
+        #     recv_halo_view[j] = recv_buffer[j]
+        # end
         push!(reqs, rreq)
         push!(reqs, sreq)
         # if MPI.Comm_rank(comm) == 0
@@ -250,6 +250,15 @@ function perform_halo_update!(u::T, halo::T,
         #         recv_id[i] - 1)
     end
     MPI.Waitall!(reqs)
+
+    # Repack after all communication
+    for i in eachindex(send_id)
+        recv_buffer = mpi_recv_buffers[i]
+        recv_halo_view = @view halo[(displs[i] + 1):(displs[i] + recv_length[i])]
+        for j in 1:length(recv_buffer)
+            recv_halo_view[j] = recv_buffer[j]
+        end
+    end
     # println("Halo update complete on rank: ", MPI.Comm_rank(comm))
 
     return u, halo
