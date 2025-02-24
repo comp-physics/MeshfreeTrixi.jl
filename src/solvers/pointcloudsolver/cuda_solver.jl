@@ -38,29 +38,18 @@ end
 # out <- out + A * x
 mul_by_accum!(A) = mul_by_accum!(A, One())
 
-# specialize for SBP operators since `matmul!` doesn't work for `UniformScaling` types.
-struct MulByUniformScaling end
-struct MulByAccumUniformScaling end
-mul_by!(A::UniformScaling) = MulByUniformScaling()
-mul_by_accum!(A::UniformScaling) = MulByAccumUniformScaling()
-
 # StructArray fallback
+### How to implement fallback for CuSparseMatrixCSC * CuArray
+### since we are removing StructArrays
 @inline function apply_to_each_field(f::F, args::Vararg{Any, N}) where {F, N}
-    StructArrays.foreachfield(f, args...) # Convert to CUDAPointCloudSolver
-end
-
-# specialize for UniformScaling types: works for either StructArray{SVector} or Matrix{SVector}
-# solution storage formats.
-@inline apply_to_each_field(f::MulByUniformScaling, out, x, args...) = copy!(out, x)
-@inline function apply_to_each_field(f::MulByAccumUniformScaling, out, x, args...)
-    @threaded for i in eachindex(x)
-        out[i] = out[i] + x[i]
-    end
+    # StructArrays.foreachfield(f, args...) ### Convert to CUDAPointCloudSolver
+    # We just apply to all columns so we just call f?
+    f(args...)
 end
 
 # Convenience Methods for reseting CuArray
 function set_to_zero!(array::CuArray)
-    StructArrays.foreachfield(col -> fill!(col, 0.0), array) # Convert to CUDAPointCloudSolver
+    array .= zero(eltype(array)) # Convert to CUDAPointCloudSolver
 end
 
 # # iteration over quantities over the entire domain (dofs, quad nodes, face nodes).
@@ -87,18 +76,15 @@ end
 
 # Allocate nested array type for CUDAPointCloudSolver solution storage.
 function allocate_nested_array(uEltype, nvars, array_dimensions, solver)
-    # store components as separate arrays, combine via StructArrays
-    return StructArray{SVector{nvars, uEltype}}(ntuple(_ -> zeros(uEltype,
-                                                                  array_dimensions...),
-                                                       nvars))
-    # CHANGE TO CUDAPointCloudSolver compat
+    # store components as columns in matrix
+    return CuArray(zeros(uEltype, array_dimensions..., nvars))
 end
 
 function reset_du!(du, solver::CUDAPointCloudSolver, other_args...)
-    @threaded for i in eachindex(du)
-        du[i] = zero(eltype(du))
-    end
-    # CHANGE TO CUDAPointCloudSolver compat
+    # @threaded for i in eachindex(du)
+    #     du[i] = zero(eltype(du))
+    # end
+    du .= zero(eltype(du))
 
     return du
 end
@@ -116,7 +102,8 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
     # differentiation matrices as required by the governing equation
     # This will compute diff_mat with two entries, the first being the dx,
     # and the second being dy. 
-    rbf_differentiation_matrices = compute_flux_operator(solver, domain)
+    rbf_differentiation_matrices = CuSparseMatrixCSC.(compute_flux_operator(solver,
+                                                                            domain))
 
     nvars = nvariables(equations)
 
@@ -153,16 +140,17 @@ end
 
 function Trixi.compute_coefficients!(u, initial_condition, t,
                                      domain::PointCloudDomain, equations,
-                                     solver::PointCloudSolver, cache)
+                                     solver::CUDAPointCloudSolver, cache)
     pd = domain.pd
     rd = solver.basis
     @unpack u_values = cache
 
     # CHANGE TO CUDAPointCloudSolver compat
+    ### MAY NEED TO CONVERT TO KERNEL
 
     for i in eachelement(domain, solver, cache)
-        u[i] = initial_condition(pd.points[i],
-                                 t, equations)
+        u[i, :] = initial_condition(pd.points[i],
+                                    t, equations)
     end
 end
 
@@ -218,6 +206,7 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
     @unpack u_face_values, flux_face_values, local_values_threaded = cache
 
     # CHANGE TO CUDAPointCloudSolver compat
+    ### MAY NEED TO CONVERT TO KERNEL
 
     boundary_flux = local_values_threaded[1]
     set_to_zero!(boundary_flux)
