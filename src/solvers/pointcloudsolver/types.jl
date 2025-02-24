@@ -140,7 +140,7 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS},
     # return PointCloudDomain(solver, pd,
     #                         boundary_tags)
 
-    return PointCloudDomain(solver.basis, medusa_data, boundary_idxs, boundary_normals,
+    return PointCloudDomain(solver.basis, filename,
                             boundary_names_dict)
 end
 

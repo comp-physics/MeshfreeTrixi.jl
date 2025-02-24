@@ -162,7 +162,7 @@ function initialize!(cb::DiscreteCallback{Condition, Affect!}, u_ode, du_ode, t,
     # performance_callback.initial_state_integrals = initial_state_integrals
     @unpack save_analysis, output_directory, analysis_filename, analysis_errors, analysis_integrals = performance_callback
 
-    if save_analysis
+    if save_analysis && mpi_isroot()
         mkpath(output_directory)
 
         # write header of output file
@@ -229,7 +229,7 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
     ncalls_rhs_since_last_analysis = (Trixi.ncalls(semi.performance_counter)
                                       -
                                       performance_callback.ncalls_rhs_last_analysis)
-    performance_index = runtime_since_last_analysis * 1 /
+    performance_index = runtime_since_last_analysis * mpi_nranks() /
                         (ndofsglobal(mesh, solver, cache)
                          *
                          ncalls_rhs_since_last_analysis)
@@ -268,36 +268,36 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
 
     @trixi_timeit timer() "analyze solution" begin
         # General information
-        println()
-        println("─"^100)
-        println(" Simulation running '", Trixi.get_name(equations), "' with ",
-                summary(solver))
-        println("─"^100)
-        println(" #timesteps:     " * @sprintf("% 14d", iter) *
-                "               " *
-                " run time:       " * @sprintf("%10.8e s", runtime_absolute))
-        println(" Δt:             " * @sprintf("%10.8e", dt) *
-                "               " *
-                " └── GC time:    " *
-                @sprintf("%10.8e s (%5.3f%%)", gc_time_absolute, gc_time_percentage))
-        println(rpad(" sim. time:      " *
-                     @sprintf("%10.8e (%5.3f%%)", t, sim_time_percentage), 46) *
-                " time/DOF/rhs!:  " * @sprintf("%10.8e s", runtime_relative))
-        println("                 " * "              " *
-                "               " *
-                " PID:            " * @sprintf("%10.8e s", performance_index))
-        println(" #DOFs per field:" * @sprintf("% 14d", Trixi.ndofs(semi)) *
-                "               " *
-                " alloc'd memory: " * @sprintf("%14.3f MiB", memory_use))
-        println(" #elements:      " *
-                @sprintf("% 14d", nelements(mesh, solver, cache)))
+        mpi_println()
+        mpi_println("─"^100)
+        mpi_println(" Simulation running '", Trixi.get_name(equations), "' with ",
+                    summary(solver))
+        mpi_println("─"^100)
+        mpi_println(" #timesteps:     " * @sprintf("% 14d", iter) *
+                    "               " *
+                    " run time:       " * @sprintf("%10.8e s", runtime_absolute))
+        mpi_println(" Δt:             " * @sprintf("%10.8e", dt) *
+                    "               " *
+                    " └── GC time:    " *
+                    @sprintf("%10.8e s (%5.3f%%)", gc_time_absolute, gc_time_percentage))
+        mpi_println(rpad(" sim. time:      " *
+                         @sprintf("%10.8e (%5.3f%%)", t, sim_time_percentage), 46) *
+                    " time/DOF/rhs!:  " * @sprintf("%10.8e s", runtime_relative))
+        mpi_println("                 " * "              " *
+                    "               " *
+                    " PID:            " * @sprintf("%10.8e s", performance_index))
+        mpi_println(" #DOFs per field:" * @sprintf("% 14d", Trixi.ndofs(semi)) *
+                    "               " *
+                    " alloc'd memory: " * @sprintf("%14.3f MiB", memory_use))
+        mpi_println(" #elements:      " *
+                    @sprintf("% 14d", nelements(mesh, solver, cache)))
 
         # Level information (only show for AMR)
         # print_amr_information(integrator.opts.callback, mesh, solver, cache)
         # println()
 
         # Open file for appending and store time step and time information
-        if performance_callback.save_analysis
+        if mpi_isroot() && performance_callback.save_analysis
             io = open(joinpath(performance_callback.output_directory,
                                performance_callback.analysis_filename), "a")
             @printf(io, "% 9d", iter)
@@ -318,13 +318,13 @@ function (performance_callback::PerformanceCallback)(u_ode, du_ode, integrator, 
         # Compute l2_error, linf_error
         # performance_callback(io, du, u, u_ode, t, semi)
 
-        println("─"^100)
-        println()
+        mpi_println("─"^100)
+        mpi_println()
 
         flush(stdout)
 
         # Add line break and close analysis file if it was opened
-        if performance_callback.save_analysis
+        if mpi_isroot() && performance_callback.save_analysis
             # This resolves a possible type instability introduced above, since `io`
             # can either be an `IOStream` or `devnull`, but we know that it must be
             # an `IOStream here`.
@@ -372,6 +372,6 @@ SolutionAnalyzer(pd::RefPointData) = pd
 
 nelements(mesh::PointCloudDomain, ::PointCloudSolver, other_args...) = mesh.pd.num_points
 function ndofsglobal(mesh::PointCloudDomain, solver::PointCloudSolver, cache)
-    return Trixi.ndofs(mesh, solver, cache)
+    return Trixi.ndofs(mesh, solver, cache) # Update to use global DOFs
 end
 end # @muladd

@@ -117,21 +117,31 @@ function trixi2vtk(u_ode, semi, t; iter = nothing, output_directory = "out", pre
 
     filenames = system_names(systems)
 
-    foreach_system(systems) do system
-        system_index = system_indices(system, systems)
+    # foreach_system(systems) do system
+    #     system_index = system_indices(system, systems)
 
-        u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
+    #     u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
 
-        trixi2vtk(u, t, system, semi;
-                  output_directory = output_directory,
-                  system_name = filenames[system_index], iter = iter, prefix = prefix,
-                  write_meta_data = write_meta_data, max_coordinates = max_coordinates,
-                  custom_quantities...)
-    end
+    #     trixi2vtk(u, t, system, semi;
+    #               output_directory = output_directory,
+    #               system_name = filenames[system_index], iter = iter, prefix = prefix,
+    #               write_meta_data = write_meta_data, max_coordinates = max_coordinates,
+    #               custom_quantities...)
+    # end
+
+    # system_index = system_indices(system, systems)
+
+    u = Trixi.wrap_array(u_ode, semi.mesh, semi.equations, semi.solver, semi.cache)
+
+    trixi2vtk(u, t, systems, semi;
+              output_directory = output_directory,
+              system_name = filenames[1], iter = iter, prefix = prefix,
+              write_meta_data = write_meta_data, max_coordinates = max_coordinates,
+              custom_quantities...)
 end
 
 # Convert data for a single TrixiParticle system to VTK format
-function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
+function trixi2vtk(u, t, systems, semi; output_directory = "out", prefix = "",
                    iter = nothing, system_name = vtkname(system), write_meta_data = true,
                    max_coordinates = Inf,
                    custom_quantities...)
@@ -164,31 +174,77 @@ function trixi2vtk(u, t, system, semi; output_directory = "out", prefix = "",
         end
     end
 
-    save_tag = string(nameof(typeof(system)))
-    vtk_grid(file, points, cells) do vtk
-        @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
-                                                          write_meta_data = write_meta_data)
-
-        # Store particle index
-        vtk["index"] = eachelement(semi.mesh, semi.solver, semi.cache)
-        # vtk["index"] = eachparticle(system)
-        vtk["time"] = t
-
-        if write_meta_data
-            vtk["solver_version"] = get_git_hash()
-            vtk["julia_version"] = string(VERSION)
+    # semi.mesh.mpi_cache.comm
+    # pvtk_grid(output_name, x, y, z, cells;
+    #     part=rank + 1, nparts=comm_size) do pvtk
+    if mpi_isparallel()
+        comm = semi.mesh.mpi_cache.comm
+        rank = MPI.Comm_rank(comm)
+        comm_size = MPI.Comm_size(comm)
+        # local_rank = semi.mesh.mpi_cache.local_buffer
+        buff = semi.cache.local_values_threaded[1]
+        local_rank = get_component(buff, 1)
+        for i in eachindex(local_rank)
+            local_rank[i] = rank
         end
+        pvtk_grid(file, points, cells; part = rank + 1, nparts = comm_size) do vtk
+            vtk["rank"] = local_rank
+            foreach_system(systems) do system
+                save_tag = string(nameof(typeof(system)))
+                @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                                  write_meta_data = write_meta_data)
 
-        # Extract custom quantities for this system
-        for (key, quantity) in custom_quantities
-            value = custom_quantity(quantity, u, t, system)
-            if value !== nothing
-                vtk[string(key)] = value
+                # Extract custom quantities for this system
+                # for (key, quantity) in custom_quantities
+                #     value = custom_quantity(quantity, u, t, system)
+                #     if value !== nothing
+                #         vtk[string(key)] = value
+                #     end
+                # end
             end
-        end
 
-        # Add to collection
-        pvd[t] = vtk
+            # Store particle index
+            vtk["index"] = eachelement(semi.mesh, semi.solver, semi.cache)
+            # vtk["rank"] = local_rank
+            vtk["time"] = t
+
+            if write_meta_data
+                vtk["solver_version"] = get_git_hash()
+                vtk["julia_version"] = string(VERSION)
+            end
+
+            # Add to collection
+            pvd[t] = vtk
+        end
+    else
+        vtk_grid(file, points, cells) do vtk
+            foreach_system(systems) do system
+                save_tag = string(nameof(typeof(system)))
+                @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                                  write_meta_data = write_meta_data)
+
+                # Extract custom quantities for this system
+                # for (key, quantity) in custom_quantities
+                #     value = custom_quantity(quantity, u, t, system)
+                #     if value !== nothing
+                #         vtk[string(key)] = value
+                #     end
+                # end
+            end
+
+            # Store particle index
+            vtk["index"] = eachelement(semi.mesh, semi.solver, semi.cache)
+            # vtk["index"] = eachparticle(system)
+            vtk["time"] = t
+
+            if write_meta_data
+                vtk["solver_version"] = get_git_hash()
+                vtk["julia_version"] = string(VERSION)
+            end
+
+            # Add to collection
+            pvd[t] = vtk
+        end
     end
     vtk_save(pvd)
 end
@@ -279,6 +335,8 @@ function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
     vtk["eps_scalar"] = system.cache.eps_c
     vtk["eps_uw"] = system.cache.eps_uw
     vtk["eps_rv"] = system.cache.eps_rv
+    vtk["approx_du"] = system.cache.approx_du
+    vtk["residual"] = system.cache.residual
 
     return vtk
 end

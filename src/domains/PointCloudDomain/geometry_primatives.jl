@@ -338,6 +338,26 @@ function PointData(medusa_data::Vector{Tv},
                                    dx_avg)
 end
 
+function PointData(medusa_data::Vector{Tv},
+                   basis::RefPointData, dx_min::Float64,
+                   dx_avg::Float64) where {Dim, Tv <: SVector{Dim, Float64}}
+    nv = basis.nv  # The number of neighbors
+
+    # Calculate neighbor list for all points
+    kdtree = KDTree(medusa_data)
+    n_idxs, n_dists = knn(kdtree, medusa_data, nv, true)
+    # dx_min = minimum(n_dists)
+
+    # Calculate avg and min distances between points
+    idxs_y, dists_y = knn(kdtree, medusa_data, 2, true)
+    # dx_avg = mean(dists_y)[2]
+    # dx_min = minimum(dists_y)[2]
+
+    # Instantiate PointData with the points and neighbors. The num_points and num_neighbors are automatically computed.
+    return PointData{Dim, Tv, Int}(medusa_data, n_idxs, length(medusa_data), nv, dx_min,
+                                   dx_avg)
+end
+
 struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
     idx::Vector{Ti}       # Indices of boundary points
     normals::Vector{Tv}   # Normals at boundary points

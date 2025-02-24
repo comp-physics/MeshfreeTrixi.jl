@@ -284,6 +284,8 @@ function update_upwind_visc!(eps_uw, u,
     end
 end
 
+# Need to specialize this for serial and MPI cases
+# MPI requires global residuals
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache)
@@ -300,12 +302,12 @@ function update_residual_visc!(eps_rv, du, u,
 
     @. residual = approx_du - du
     StructArrays.foreachfield(col -> col .= abs.(col), residual)
-    mean_u = mean(u)
+    mean_u = ode_mean(u)
     recursivecopy!(local_u, u)
     for i in eachindex(local_u)
         local_u[i] = abs.(local_u[i] .- mean_u)
     end
-    n_inf_norms = maximum(local_u)
+    n_inf_norms = ode_maximum(local_u)
     n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
     rho_n, m1_n, m2_n, e_n = n_inf_norms
 
@@ -330,7 +332,8 @@ function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter)
     for i in eachindex(eps)
         if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
             if isnan(eps_uw[i]) || isinf(eps_uw[i])
-                eps[i] = eps()
+                # println("eps():", Base.eps())
+                eps[i] = Base.eps()
                 eps_c[i] = 2.0
             else
                 eps[i] = eps_uw[i]

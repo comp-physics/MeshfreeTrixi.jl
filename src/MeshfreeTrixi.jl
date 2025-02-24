@@ -33,7 +33,7 @@ using Trixi: init_mpi, mpi_comm,
              mpi_print, ode_norm, recursive_sum_abs2, recursive_length, ode_unstable_check,
              ode_default_options
 
-import Trixi: rhs!
+import Trixi: rhs!, ode_norm
 
 # Trixi Dependencies
 # # MPI needs to be imported before HDF5 to be able to use parallel HDF5
@@ -117,7 +117,8 @@ using TimerOutputs: TimerOutputs, @notimeit, TimerOutput, print_timer, reset_tim
 using SimpleUnPack: @pack!
 using NaNMath
 # using Printf: @printf, @sprintf, println
-using WriteVTK: vtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
+# using WriteVTK: vtk_grid, pvtk_grid, MeshCell, VTKCellTypes, paraview_collection, vtk_save
+using WriteVTK
 using IterativeSolvers
 import Base: *
 import LinearAlgebra: mul!
@@ -133,7 +134,7 @@ include("basic_types.jl")
 # Include all top-level source files
 include("auxiliary/auxiliary.jl")
 # include("auxiliary/geometry_primatives.jl")
-# include("auxiliary/mpi.jl")
+include("auxiliary/mpi.jl")
 # include("auxiliary/p4est.jl")
 # include("equations/equations.jl") 
 include("equations/PointCloudBCs.jl")

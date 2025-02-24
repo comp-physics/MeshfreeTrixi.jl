@@ -4,14 +4,12 @@
 Domain specification containing point cloud data structure and boundary tags 
 for a point cloud domain. Includes specialization for MPI parallelism.
 """
-# struct PointCloudDomain{NDIMS, domain_type, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
-#     domain_type::DomainType
-#     pd::PointDataT
-#     boundary_tags::BoundaryFaceT
-#     unsaved_changes::Bool # Required for SaveSolutionCallback
-# end
+abstract type PointCloudDomain{NDIMS} end
 
 include("SerialPointCloud.jl")
+# MPI-based PointCloudDomain
+include("scatter_pointcloud.jl")
+include("partition_domain.jl")
 include("ParallelPointCloud.jl")
 
 # const SerialPointCloudDomain{NDIMS} = PointCloudDomain{NDIMS, <:SerialPointCloud{NDIMS}}
@@ -23,19 +21,17 @@ include("ParallelPointCloud.jl")
 
 # Primary constructor for MPI-aware PointCloudDomain
 function PointCloudDomain(basis::RefPointData{NDIMS},
-                          points::Vector{SVector{NDIMS, Float64}},
-                          boundary_idxs::Vector{Vector{Int}},
-                          boundary_normals::Vector{Vector{SVector{NDIMS, Float64}}},
+                          filename::String,
                           boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
 
     # TODO: MPI, create nice interface for a parallel tree/mesh
     if mpi_isparallel()
         # TreeType = ParallelTree{NDIMS}
-        return ParallelPointCloudDomain(basis, points, boundary_idxs, boundary_normals,
+        return ParallelPointCloudDomain(basis, filename,
                                         boundary_names_dict)
     else
         # TreeType = SerialTree{NDIMS}
-        return SerialPointCloudDomain(basis, points, boundary_idxs, boundary_normals,
+        return SerialPointCloudDomain(basis, filename,
                                       boundary_names_dict)
     end
 
@@ -58,13 +54,13 @@ end
 # end
 
 function Base.show(io::IO,
-                   mesh::Union{PointCloudDomain{Dim, Tv, Ti},
+                   mesh::Union{SerialPointCloudDomain{Dim, Tv, Ti},
                                ParallelPointCloudDomain{Dim, Tv, Ti}}) where {Dim, Tv, Ti}
     print(io, "PointCloudDomain with NDIMS = $Dim")
 end
 
 function Base.show(io::IO, ::MIME"text/plain",
-                   mesh::Union{PointCloudDomain{Dim, Tv, Ti},
+                   mesh::Union{SerialPointCloudDomain{Dim, Tv, Ti},
                                ParallelPointCloudDomain{Dim, Tv, Ti}}) where {Dim, Tv, Ti}
     if get(io, :compact, false)
         show(io, mesh)

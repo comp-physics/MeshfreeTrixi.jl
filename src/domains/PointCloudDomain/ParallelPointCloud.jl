@@ -2,40 +2,72 @@
 # currently limited to Lobatto-Legendre nodes
 
 # TODO: MPI dimension agnostic
+# For u_local, halo = halo_update!(u_local, halo, send_id, recv_id, send_idx, recv_length, comm)
 mutable struct MPICache{uEltype <: Real}
-    mpi_neighbor_ranks::Vector{Int}
-    mpi_neighbor_interfaces::Vector{Vector{Int}}
-    mpi_neighbor_mortars::Vector{Vector{Int}}
-    mpi_send_buffers::Vector{Vector{uEltype}}
-    mpi_recv_buffers::Vector{Vector{uEltype}}
-    mpi_send_requests::Vector{MPI.Request}
-    mpi_recv_requests::Vector{MPI.Request}
-    n_elements_by_rank::OffsetArray{Int, 1, Array{Int, 1}}
+    # mpi_neighbor_ranks::Vector{Int}
+    mpi_send_id::Vector{Int}
+    mpi_recv_id::Vector{Int}
+    halo_send_idx::Vector{Vector{Int}}
+    halo_recv_length::Vector{Int}
+    # mpi_neighbor_interfaces::Vector{Vector{Int}}
+    # mpi_neighbor_mortars::Vector{Vector{Int}}
+    mpi_send_buffers::Vector{Vector{SVector{4, uEltype}}}
+    mpi_recv_buffers::Vector{Vector{SVector{4, uEltype}}}
+    # mpi_send_requests::Vector{MPI.Request}
+    # mpi_recv_requests::Vector{MPI.Request}
+    mpi_requests::Vector{MPI.Request}
+    # n_elements_by_rank::OffsetArray{Int, 1, Array{Int, 1}}
+    n_elements_local::Int
     n_elements_global::Int
-    first_element_global_id::Int
+    comm::MPI.Comm
+    # first_element_global_id::Int
 end
 
-function MPICache(uEltype)
+function MPICache(uEltype, mpi_send_id::Vector{Int}, mpi_recv_id::Vector{Int},
+                  halo_send_idx::Vector{Vector{Int}}, halo_recv_length::Vector{Int},
+                  n_elements_local::Int, n_elements_global::Int)
     # MPI communication "just works" for bitstypes only
+    # SVectors of bitstypes are bitstypes
     if !isbitstype(uEltype)
         throw(ArgumentError("MPICache only supports bitstypes, $uEltype is not a bitstype."))
     end
-    mpi_neighbor_ranks = Vector{Int}(undef, 0)
-    mpi_neighbor_interfaces = Vector{Vector{Int}}(undef, 0)
-    mpi_neighbor_mortars = Vector{Vector{Int}}(undef, 0)
-    mpi_send_buffers = Vector{Vector{uEltype}}(undef, 0)
-    mpi_recv_buffers = Vector{Vector{uEltype}}(undef, 0)
-    mpi_send_requests = Vector{MPI.Request}(undef, 0)
-    mpi_recv_requests = Vector{MPI.Request}(undef, 0)
-    n_elements_by_rank = OffsetArray(Vector{Int}(undef, 0), 0:-1)
-    n_elements_global = 0
-    first_element_global_id = 0
 
-    MPICache{uEltype}(mpi_neighbor_ranks, mpi_neighbor_interfaces, mpi_neighbor_mortars,
-                      mpi_send_buffers, mpi_recv_buffers,
-                      mpi_send_requests, mpi_recv_requests,
-                      n_elements_by_rank, n_elements_global,
-                      first_element_global_id)
+    # For initializing send and recv buffers we 
+    # should already know how many elements to expect
+
+    # mpi_neighbor_ranks = Vector{Int}(undef, 0)
+    # mpi_send_id = Vector{Int}(undef, 0)
+    # mpi_recv_id = Vector{Int}(undef, 0)
+    # halo_send_idx = Vector{Vector{Int}}(undef, 0)
+    # halo_recv_length = Vector{Int}(undef, 0)
+    # mpi_neighbor_interfaces = Vector{Vector{Int}}(undef, 0)
+    # mpi_neighbor_mortars = Vector{Vector{Int}}(undef, 0)
+
+    # Send and Recv buffers cannot be Vectors of StructArrays as 
+    # they will not work with MPI.Buffer 
+    # We need intermediate storage of Vector{Vector{SVector}}
+    mpi_send_buffers = Vector{Vector{SVector{4, uEltype}}}(undef, 0)
+    mpi_recv_buffers = Vector{Vector{SVector{4, uEltype}}}(undef, 0)
+    # mpi_send_requests = Vector{MPI.Request}(undef, 0)
+    # mpi_recv_requests = Vector{MPI.Request}(undef, 0)
+    mpi_requests = Vector{MPI.Request}(undef, 0)
+    # n_elements_by_rank = OffsetArray(Vector{Int}(undef, 0), 0:-1)
+    # n_elements_local = 0
+    # n_elements_global = 0
+    # first_element_global_id = 0
+
+    # Resize buffers to [neighbors][elements_per_neighbor]
+    for i in 1:length(mpi_send_id)
+        push!(mpi_send_buffers,
+              Vector{SVector{4, uEltype}}(undef, length(halo_send_idx[i])))
+        push!(mpi_recv_buffers, Vector{SVector{4, uEltype}}(undef, halo_recv_length[i]))
+    end
+
+    comm = MPI.COMM_WORLD
+
+    MPICache{uEltype}(mpi_send_id, mpi_recv_id, halo_send_idx, halo_recv_length,
+                      mpi_send_buffers, mpi_recv_buffers, mpi_requests,
+                      n_elements_local, n_elements_global, comm)
 end
 @inline Base.eltype(::MPICache{uEltype}) where {uEltype} = uEltype
 
@@ -50,10 +82,11 @@ end
 #     boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}  # Boundary data
 # end
 ### Actual ParallelPointCloudDomain for dispatching problems with 
-struct ParallelPointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
+struct ParallelPointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT} <:
+       PointCloudDomain{NDIMS}
     pd::PointDataT
     boundary_tags::BoundaryFaceT
-    mpi::MPICache
+    mpi_cache::MPICache
     unsaved_changes::Bool # Required for SaveSolutionCallback
 end
 
@@ -84,17 +117,44 @@ end
 
 # Main function for instantiating all the necessary data for a ParallelPointCloudDomain
 function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
-                                  points::Vector{SVector{NDIMS, Float64}},
-                                  boundary_idxs::Vector{Vector{Int}},
-                                  boundary_normals::Vector{Vector{SVector{NDIMS, Float64}}},
+                                  filename::String,
                                   boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
-    # Update to construct MPI cache
-    medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
-    pd = PointData(medusa_data, solver.basis)
+    # medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
+
+    # Pre-allocate MPI cache. Currently rank 0 loads all data and 
+    # distributes to other ranks.
+    # Pre-process everything then set up our local MPI cache
+    # followed by the rest of the data structure.
+    num_procs = mpi_nranks()
+    local_points, local_to_global_idx,
+    halo_points, halo_global, halo_proc, halo_global_to_local_idx,
+    boundary_global, boundary_normals_local, boundary_local_idxs,
+    boundary_halo_global, boundary_normals_halo, boundary_halo_idxs,
+    send_id, recv_id, send_idx, recv_length, dx_min, dx_avg, num_global_points = preprocess(filename,
+                                                                                            2 *
+                                                                                            basis.nv,
+                                                                                            num_procs)
+
+    num_local_points = length(local_points)
+    num_halo_points = length(halo_points)
+
+    mpi_cache = MPICache(real(basis), send_id, recv_id, send_idx, recv_length,
+                         num_local_points, num_global_points)
+
+    points = vcat(local_points, halo_points)
+    pd = PointData(points, basis, dx_min, dx_avg)
+
+    # Combine boundary data
+    boundary_idxs = deepcopy(boundary_local_idxs)
+    boundary_normals = deepcopy(boundary_normals_local)
+    for i in eachindex(boundary_idxs)
+        append!(boundary_idxs[i], boundary_halo_idxs[i])
+        append!(boundary_normals[i], boundary_normals_halo[i])
+    end
     boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
                          for (name, idx) in boundary_names_dict)
     return ParallelPointCloudDomain(pd,
-                                    boundary_tags, mpi, false)
+                                    boundary_tags, mpi_cache, false)
 
     # return ParallelPointCloudDomain{NDIMS, PointData{NDIMS, Tv, Ti},
     #                                 Dict{Symbol, BoundaryData{Ti, Tv}}}(pd, boundary_tags,
