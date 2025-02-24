@@ -335,6 +335,8 @@ function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
     vtk["eps_scalar"] = system.cache.eps_c
     vtk["eps_uw"] = system.cache.eps_uw
     vtk["eps_rv"] = system.cache.eps_rv
+    vtk["approx_du"] = system.cache.approx_du
+    vtk["residual"] = system.cache.residual
 
     return vtk
 end
