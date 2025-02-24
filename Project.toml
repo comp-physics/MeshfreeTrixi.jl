@@ -4,6 +4,7 @@ authors = ["jarias9 <68081892+jarias9@users.noreply.github.com> and contributors
 version = "1.0.0-DEV"
 
 [deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
 DelimitedFiles = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
@@ -41,27 +42,8 @@ Trixi = "a7f1ee26-1774-49b1-8366-f1abc58fbfcb"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
-# DynamicPolynomials = "0.5"
-# MuladdMacro = "0.2"
-# NaNMath = "1"
-# NearestNeighbors = "0.4"
-# Octavian = "0.3"
-# OffsetArrays = "1"
-# OrdinaryDiffEq = "6"
-# Reexport = "1"
-# RuntimeGeneratedFunctions = "0.5"
-# SciMLBase = "2"
-# SimpleUnPack = "1"
-# StaticArrays = "1"
-# StaticPolynomials = "1"
-# Statistics = "1"
-# StrideArrays = "0.1"
-# StructArrays = "0.6"
-# Symbolics = "5"
-# TimerOutputs = "0.5"
+CUDA = "5.1.2"
 Trixi = "0.6 - 0.7.5"
-# WriteVTK = "1"
-# julia = "1"
 
 [extras]
 RadialBasisFiniteDifferences = "b7528a51-23a9-4b4d-be8b-86e769992571"
