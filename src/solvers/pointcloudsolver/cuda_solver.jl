@@ -42,8 +42,6 @@ mul_by_accum!(A) = mul_by_accum!(A, One())
 ### How to implement fallback for CuSparseMatrixCSC * CuArray
 ### since we are removing StructArrays
 @inline function apply_to_each_field(f::F, args::Vararg{Any, N}) where {F, N}
-    # StructArrays.foreachfield(f, args...) ### Convert to CUDAPointCloudSolver
-    # We just apply to all columns so we just call f?
     f(args...)
 end
 
@@ -154,6 +152,44 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     end
 end
 
+function flux_test(u::U, orientation::Integer,
+                   equations::CompressibleEulerEquations2D) where {U}
+    rho, rho_v1, rho_v2, rho_e = u
+    v1 = rho_v1 / rho
+    v2 = rho_v2 / rho
+    p = (equations.gamma - 1) * (rho_e - 0.5 * (rho_v1 * v1 + rho_v2 * v2))
+    if orientation == 1
+        f1 = rho_v1
+        f2 = rho_v1 * v1 + p
+        f3 = rho_v1 * v2
+        f4 = (rho_e + p) * v1
+    else
+        f1 = rho_v2
+        f2 = rho_v2 * v1
+        f3 = rho_v2 * v2 + p
+        f4 = (rho_e + p) * v2
+    end
+    # @cuprintln("f1 $f1, f2 $f2, f3 $f3, f4 $f4")
+    return SVector(f1, f2, f3, f4)
+end
+
+function flux_kernel!(flux_values, u, i, equations)
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+    # @cuprintln("thread $index, block $stride, size $(size(u)[1])")
+
+    for e in index:stride:size(u)[1]
+        u_view = @view u[e, :]
+        flux_values[e, :] .= flux_test(u_view, i, equations)
+    end
+end
+
+function bench_flux_kernel!(flux_values, u, i, equations)
+    CUDA.@sync begin
+        @cuda flux_kernel!(flux_values, u, i, equations)
+    end
+end
+
 function calc_fluxes!(du, u, domain::PointCloudDomain,
                       have_nonconservative_terms::False, equations,
                       engine::RBFFDEngine,
@@ -164,12 +200,16 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded = cache
 
     # CHANGE TO CUDAPointCloudSolver compat
+    threads = 256
+    numblocks = ceil(Int, size(u)[1] / threads)
 
     flux_values = local_values_threaded[1]
     for i in eachdim(domain)
-        for e in eachelement(domain, solver, cache)
-            flux_values[e] = flux(u[e], i, equations)
-        end
+        # for e in eachelement(domain, solver, cache)
+        #     flux_values[e, :] = flux(u[e, :], i, equations)
+        # end
+        @cuda threads=threads blocks=numblocks flux_kernel!(flux_values, u, i,
+                                                            equations)
         apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[i],
                                           -1),
                             du, flux_values)
