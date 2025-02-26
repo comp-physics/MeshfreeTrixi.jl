@@ -6,12 +6,34 @@
 
 # `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
 # the use of multi-dimensional operators in the solver.
-const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = RBFSolver{<:RefPointData{NDIMS,
-                                                                                       ElemType,
-                                                                                       ApproxType},
-                                                                        Engine} where {
-                                                                                       Engine
-                                                                                       }
+const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine, Space} = RBFSolver{<:RefPointData{NDIMS,
+                                                                                              ElemType,
+                                                                                              ApproxType},
+                                                                               Engine,
+                                                                               Space} where {
+                                                                                             Engine,
+                                                                                             Space <:
+                                                                                             ExecutionSpace
+                                                                                             }
+
+# `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
+# the use of multi-dimensional operators in the solver.
+# CUDAPointCloudSolver allows specialization for Nvidia GPUs
+# struct CUDAPointCloudSolver{NDIMS, ElemType, ApproxType, Engine} <:
+#        PointCloudSolver{NDIMS, ElemType, ApproxType, Engine}
+# end
+
+const CPUPointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = PointCloudSolver{NDIMS,
+                                                                                  ElemType,
+                                                                                  ApproxType,
+                                                                                  Engine,
+                                                                                  CPUExecutionSpace}
+
+const CUDAPointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = PointCloudSolver{NDIMS,
+                                                                                   ElemType,
+                                                                                   ApproxType,
+                                                                                   Engine,
+                                                                                   CUDAExecutionSpace}
 
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
@@ -50,11 +72,12 @@ function PointCloudSolver(; polydeg = nothing,
                           element_type::AbstractElemShape,
                           approximation_type = RBF(),
                           engine = RBFFDEngine(),
+                          execution_space,
                           kwargs...)
 
     # call dispatchable constructor
     PointCloudSolver(element_type, approximation_type, engine,
-                     polydeg = polydeg, kwargs...)
+                     polydeg = polydeg, execution_space, kwargs...)
 end
 
 # dispatchable constructor for PointCloudSolver to allow for specialization
@@ -62,15 +85,15 @@ function PointCloudSolver(element_type::AbstractElemShape,
                           approximation_type,
                           engine,
                           polydeg::Integer,
+                          execution_space,
                           kwargs...)
     rd = RefPointData(element_type, approximation_type, polydeg; kwargs...)
-    # `nothing` is passed as `mortar`
     return RBFSolver(rd, engine)
 end
 
-function PointCloudSolver(basis::RefPointData; engine = RBFFDEngine())
-    # `nothing` is passed as `mortar`
-    RBFSolver(basis, engine)
+function PointCloudSolver(basis::RefPointData, execution_space::Space;
+                          engine = RBFFDEngine()) where {Space <: ExecutionSpace}
+    RBFSolver{execution_space}(basis, engine)
 end
 
 """

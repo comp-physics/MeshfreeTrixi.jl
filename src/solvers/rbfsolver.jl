@@ -5,7 +5,12 @@
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
 @muladd begin
 #! format: noindent
+
 abstract type AbstractRBFEngine end
+
+abstract type ExecutionSpace end
+struct CPUExecutionSpace <: ExecutionSpace end
+struct CUDAExecutionSpace <: ExecutionSpace end
 
 function get_element_variables!(element_variables, u, mesh, equations,
                                 engine::AbstractRBFEngine, solver, cache)
@@ -30,42 +35,20 @@ standard textbooks. Replaces VolumeIntegralWeakForm()
   [doi: 10.1016/j.jcp.2016.02.078](https://doi.org/10.1016/j.jcp.2016.02.078)
 
 """
+# New "Engines" refer to different ways to perform Derivative calculation
+# for example, we would define a new engine for Schafer sparse backend 
 struct RBFFDEngine <: AbstractRBFEngine end
 
-# # Example "engine" that utilizes indicators
-# """
-#     VolumeIntegralShockCapturingHG(indicator; volume_flux_dg=flux_central,
-#                                               volume_flux_fv=flux_lax_friedrichs)
-
-# Shock-capturing volume integral type for DG methods using a convex blending of
-# the finite volume method with numerical flux `volume_flux_fv` and the
-# [`VolumeIntegralFluxDifferencing`](@ref) with volume flux `volume_flux_dg`.
-# The amount of blending is determined by the `indicator`, e.g.,
-# [`IndicatorHennemannGassner`](@ref).
-
-# ## References
-
-# - Hennemann, Gassner (2020)
-#   "A provably entropy stable subcell shock capturing approach for high order split form DG"
-#   [arXiv: 2008.12044](https://arxiv.org/abs/2008.12044)
-# """
-# struct VolumeIntegralShockCapturingHG{VolumeFluxDG, VolumeFluxFV, Indicator} <:
-#        AbstractVolumeIntegral
-#     volume_flux_dg::VolumeFluxDG # symmetric, e.g. split-form or entropy-conservative
-#     volume_flux_fv::VolumeFluxFV # non-symmetric in general, e.g. entropy-dissipative
-#     indicator::Indicator
-# end
-
 create_cache(mesh, equations, ::RBFFDEngine, solver, uEltype) = NamedTuple()
-struct RBFFDEngineCUDA <: AbstractRBFEngine end
-create_cache(mesh, equations, ::RBFFDEngineCUDA, solver, uEltype) = NamedTuple()
 
+### MOVE TO DEPRECATE RBF_SOLVER. ADDS REDUNDANCY TO POINTCLOUDSOLVER WHICH ALREADY 
+### CAN DISPATCH TO DIFFERENT BACKENDS BASED ON ENGINE
 """
     RBFSolver(; basis, engine)
 
 Create an RBF-FD method.
 """
-struct RBFSolver{Basis, RBFEngine}
+struct RBFSolver{Basis, RBFEngine, Space <: ExecutionSpace}
     basis::Basis
     engine::RBFEngine
 end
@@ -101,20 +84,6 @@ Base.summary(io::IO, solver::RBFSolver) = print(io,
                                                 ")")
 
 @inline Base.real(solver::RBFSolver) = real(solver.basis)
-
-function get_element_variables!(element_variables, u, domain, equations,
-                                solver::RBFSolver, cache)
-    get_element_variables!(element_variables, u, domain, equations,
-                           solver.engine,
-                           solver, cache)
-end
-
-function get_node_variables!(node_variables, domain, equations, solver::RBFSolver,
-                             cache)
-    get_node_variables!(node_variables, domain, equations, solver.engine,
-                        solver,
-                        cache)
-end
 
 # const MeshesRBFSolverSEM = Union{TreeMesh, StructuredMesh, UnstructuredMesh2D,
 #                                  P4estMesh,
@@ -275,185 +244,4 @@ SolutionAnalyzer(solver::RBFSolver; kwargs...) = SolutionAnalyzer(solver.basis;
                                                                   kwargs...)
 
 AdaptorAMR(domain, solver::RBFSolver) = AdaptorL2(solver.basis)
-
-# General structs for discretizations based on the basic principle of
-# RBFSolverSEM (discontinuous Galerkin spectral element method)
-# include("solversem/solversem.jl")
-
-# Finite difference methods using summation by parts (SBP) operators
-# These methods are very similar to RBFSolver methods since they also impose interface
-# and boundary conditions weakly. Thus, these methods can re-use a lot of
-# functionality implemented for RBFSolverSEM.
-# include("fdsbp_tree/fdsbp.jl")
-# include("fdsbp_unstructured/fdsbp.jl")
-
-# function allocate_coefficients(domain::AbstractDomain, equations, solver::RBFSolver,
-#                                cache)
-#     # We must allocate a `Vector` in order to be able to `resize!` it (AMR).
-#     # cf. wrap_array
-#     zeros(eltype(cache.elements),
-#           nvariables(equations) * nnodes(solver)^ndims(domain) *
-#           nelements(solver, cache))
-# end
-
-# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-#                             solver::RBFSolverSEM, cache)
-#     @boundscheck begin
-#         @assert length(u_ode) ==
-#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
-#                 nelements(solver, cache)
-#     end
-#     # We would like to use
-#     #     reshape(u_ode, (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
-#     # but that results in
-#     #     ERROR: LoadError: cannot resize array with shared data
-#     # when we resize! `u_ode` during AMR.
-#     #
-#     # !!! danger "Segfaults"
-#     #     Remember to `GC.@preserve` temporaries such as copies of `u_ode`
-#     #     and other stuff that is only used indirectly via `wrap_array` afterwards!
-
-#     # Currently, there are problems when AD is used with `PtrArray`s in broadcasts
-#     # since LoopVectorization does not support `ForwardDiff.Dual`s. Hence, we use
-#     # optimized `PtrArray`s whenever possible and fall back to plain `Array`s
-#     # otherwise.
-#     if LoopVectorization.check_args(u_ode)
-#         # This version using `PtrArray`s from StrideArrays.jl is very fast and
-#         # does not result in allocations.
-#         #
-#         # !!! danger "Heisenbug"
-#         #     Do not use this code when `@threaded` uses `Threads.@threads`. There is
-#         #     a very strange Heisenbug that makes some parts very slow *sometimes*.
-#         #     In fact, everything can be fast and fine for many cases but some parts
-#         #     of the RHS evaluation can take *exactly* (!) five seconds randomly...
-#         #     Hence, this version should only be used when `@threaded` is based on
-#         #     `@batch` from Polyester.jl or something similar. Using Polyester.jl
-#         #     is probably the best option since everything will be handed over to
-#         #     Chris Elrod, one of the best performance software engineers for Julia.
-#         PtrArray(pointer(u_ode),
-#                  (StaticInt(nvariables(equations)),
-#                   ntuple(_ -> StaticInt(nnodes(solver)), ndims(domain))...,
-#                   nelements(solver, cache)))
-#         #  (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
-#     else
-#         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-#         unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-#                     (nvariables(equations),
-#                      ntuple(_ -> nnodes(solver), ndims(domain))...,
-#                      nelements(solver, cache)))
-#     end
-# end
-
-# # Finite difference summation by parts (FDSBP) methods
-# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-#                             solver::FDSBP, cache)
-#     @boundscheck begin
-#         @assert length(u_ode) ==
-#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
-#                 nelements(solver, cache)
-#     end
-#     # See comments on the RBFSolverSEM version above
-#     if LoopVectorization.check_args(u_ode)
-#         # Here, we do not specialize on the number of nodes using `StaticInt` since
-#         # - it will not be type stable (SBP operators just store it as a runtime value)
-#         # - FD methods tend to use high node counts
-#         PtrArray(pointer(u_ode),
-#                  (StaticInt(nvariables(equations)),
-#                   ntuple(_ -> nnodes(solver), ndims(domain))...,
-#                   nelements(solver, cache)))
-#     else
-#         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-#         unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-#                     (nvariables(equations),
-#                      ntuple(_ -> nnodes(solver), ndims(domain))...,
-#                      nelements(solver, cache)))
-#     end
-# end
-
-# # General fallback
-# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-#                             solver::RBFSolver, cache)
-#     wrap_array_native(u_ode, domain, equations, solver, cache)
-# end
-
-# # Like `wrap_array`, but guarantees to return a plain `Array`, which can be better
-# # for interfacing with external C libraries (MPI, HDF5, visualization),
-# # writing solution files etc.
-# @inline function wrap_array_native(u_ode::AbstractVector, domain::AbstractDomain,
-#                                    equations,
-#                                    solver::RBFSolver, cache)
-#     @boundscheck begin
-#         @assert length(u_ode) ==
-#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
-#                 nelements(solver, cache)
-#     end
-#     unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-#                 (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))...,
-#                  nelements(solver, cache)))
-# end
-
-# function compute_coefficients!(u, func, t, domain::AbstractDomain{1}, equations,
-#                                solver::RBFSolver,
-#                                cache)
-#     @threaded for element in eachelement(solver, cache)
-#         for i in eachnode(solver)
-#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-#                                      i,
-#                                      element)
-#             # Changing the node positions passed to the initial condition by the minimum
-#             # amount possible with the current type of floating point numbers allows setting
-#             # discontinuous initial data in a simple way. In particular, a check like `if x < x_jump`
-#             # works if the jump location `x_jump` is at the position of an interface.
-#             if i == 1
-#                 x_node = SVector(nextfloat(x_node[1]))
-#             elseif i == nnodes(solver)
-#                 x_node = SVector(prevfloat(x_node[1]))
-#             end
-#             u_node = func(x_node, t, equations)
-#             set_node_vars!(u, u_node, equations, solver, i, element)
-#         end
-#     end
-# end
-
-# function compute_coefficients!(u, func, t, domain::AbstractDomain{2}, equations,
-#                                solver::RBFSolver,
-#                                cache)
-#     @threaded for element in eachelement(solver, cache)
-#         for j in eachnode(solver), i in eachnode(solver)
-#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-#                                      i,
-#                                      j, element)
-#             u_node = func(x_node, t, equations)
-#             set_node_vars!(u, u_node, equations, solver, i, j, element)
-#         end
-#     end
-# end
-
-# function compute_coefficients!(u, func, t, domain::AbstractDomain{3}, equations,
-#                                solver::RBFSolver,
-#                                cache)
-#     @threaded for element in eachelement(solver, cache)
-#         for k in eachnode(solver), j in eachnode(solver), i in eachnode(solver)
-#             x_node = get_node_coords(cache.elements.node_coordinates, equations, solver,
-#                                      i,
-#                                      j, k, element)
-#             u_node = func(x_node, t, equations)
-#             set_node_vars!(u, u_node, equations, solver, i, j, k, element)
-#         end
-#     end
-# end
-
-# Discretizations specific to each domain type of Trixi.jl
-# If some functionality is shared by multiple combinations of meshes/solvers,
-# it is defined in the directory of the most basic domain and solver type.
-# The most basic solver type in Trixi.jl is RBFSolverSEM (historic reasons and background
-# of the main contributors).
-# We consider the `TreeMesh` to be the most basic domain type since it is Cartesian
-# and was the first domain in Trixi.jl. The order of the other domain types is the same
-# as the include order below.
-# include("solversem_tree/solver.jl")
-# include("solversem_structured/solver.jl")
-# include("solversem_unstructured/solver.jl")
-# include("solversem_p4est/solver.jl")
-# include("solversem_t8code/solver.jl")
 end # @muladd
