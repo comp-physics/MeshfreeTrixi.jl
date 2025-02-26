@@ -172,7 +172,10 @@ function flux_test(u::U, orientation::Integer,
     # @cuprintln("f1 $f1, f2 $f2, f3 $f3, f4 $f4")
     return SVector(f1, f2, f3, f4)
 end
-
+function flux_cuda(u::U, orientation::Integer,
+                   equations::CompressibleEulerEquations2D) where {U}
+    return flux(u, orientation, equations)
+end
 function flux_kernel!(flux_values, u, i, equations)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
@@ -180,7 +183,7 @@ function flux_kernel!(flux_values, u, i, equations)
 
     for e in index:stride:size(u)[1]
         u_view = @view u[e, :]
-        flux_values[e, :] .= flux_test(u_view, i, equations)
+        flux_values[e, :] .= flux_cuda(u_view, i, equations)
     end
 end
 
