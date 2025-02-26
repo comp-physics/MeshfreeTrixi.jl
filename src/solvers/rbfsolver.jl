@@ -53,12 +53,16 @@ struct RBFSolver{Basis, RBFEngine, Space <: ExecutionSpace}
     engine::RBFEngine
 end
 
-function Base.show(io::IO, solver::RBFSolver)
+function Base.show(io::IO,
+                   solver::RBFSolver{Basis, RBFEngine, Space}) where {Basis,
+                                                                      RBFEngine,
+                                                                      Space}
     @nospecialize solver # reduce precompilation time
 
     print(io, "RBFSolver{", real(solver), "}(")
     print(io, solver.basis)
     print(io, ", ", solver.engine)
+    print(io, ", ", Space)
     print(io, ")")
 end
 
@@ -80,9 +84,6 @@ function Base.show(io::IO, mime::MIME"text/plain",
         end
         summary_line(io, "execution space",
                      Space)
-        if !(solver.engine isa ExecutionSpace)
-            show(increment_indent(io), mime, Space)
-        end
         summary_footer(io)
     end
 end
