@@ -62,7 +62,10 @@ function Base.show(io::IO, solver::RBFSolver)
     print(io, ")")
 end
 
-function Base.show(io::IO, mime::MIME"text/plain", solver::RBFSolver)
+function Base.show(io::IO, mime::MIME"text/plain",
+                   solver::RBFSolver{Basis, RBFEngine, Space}) where {Basis,
+                                                                      RBFEngine,
+                                                                      Space}
     @nospecialize solver # reduce precompilation time
 
     if get(io, :compact, false)
@@ -74,6 +77,11 @@ function Base.show(io::IO, mime::MIME"text/plain", solver::RBFSolver)
                      solver.engine |> typeof |> nameof)
         if !(solver.engine isa AbstractRBFEngine)
             show(increment_indent(io), mime, solver.engine)
+        end
+        summary_line(io, "execution space",
+                     Space)
+        if !(solver.engine isa ExecutionSpace)
+            show(increment_indent(io), mime, Space)
         end
         summary_footer(io)
     end
