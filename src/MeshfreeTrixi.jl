@@ -166,6 +166,10 @@ export BoundaryConditionDoNothing
 # Export Mesh/Domain Types
 export PointCloudDomain
 
+# Export Execution Spaces 
+export CPUExecutionSpace
+export CUDAExecutionSpace
+
 # Export Solvers and Methods
 # Engines replace VolumeIntegral
 export PointCloudSolver, RBFSolver,

@@ -4,13 +4,6 @@
 # inside the @muladd block is edited. See https://github.com/trixi-framework/Trixi.jl/issues/801
 # for more details.
 
-# `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
-# the use of multi-dimensional operators in the solver.
-# CUDAPointCloudSolver allows specialization for Nvidia GPUs
-struct CUDAPointCloudSolver{NDIMS, ElemType, ApproxType, Engine} <:
-       PointCloudSolver{NDIMS, ElemType, ApproxType, Engine}
-end
-
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -138,7 +131,8 @@ end
 
 function Trixi.compute_coefficients!(u, initial_condition, t,
                                      domain::PointCloudDomain, equations,
-                                     solver::CUDAPointCloudSolver, cache)
+                                     solver::CUDAPointCloudSolver,
+                                     cache)
     pd = domain.pd
     rd = solver.basis
     @unpack u_values = cache
@@ -152,26 +146,6 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     end
 end
 
-function flux_test(u::U, orientation::Integer,
-                   equations::CompressibleEulerEquations2D) where {U}
-    rho, rho_v1, rho_v2, rho_e = u
-    v1 = rho_v1 / rho
-    v2 = rho_v2 / rho
-    p = (equations.gamma - 1) * (rho_e - 0.5 * (rho_v1 * v1 + rho_v2 * v2))
-    if orientation == 1
-        f1 = rho_v1
-        f2 = rho_v1 * v1 + p
-        f3 = rho_v1 * v2
-        f4 = (rho_e + p) * v1
-    else
-        f1 = rho_v2
-        f2 = rho_v2 * v1
-        f3 = rho_v2 * v2 + p
-        f4 = (rho_e + p) * v2
-    end
-    # @cuprintln("f1 $f1, f2 $f2, f3 $f3, f4 $f4")
-    return SVector(f1, f2, f3, f4)
-end
 function flux_cuda(u::U, orientation::Integer,
                    equations::CompressibleEulerEquations2D) where {U}
     return flux(u, orientation, equations)
@@ -184,12 +158,6 @@ function flux_kernel!(flux_values, u, i, equations)
     for e in index:stride:size(u)[1]
         u_view = @view u[e, :]
         flux_values[e, :] .= flux_cuda(u_view, i, equations)
-    end
-end
-
-function bench_flux_kernel!(flux_values, u, i, equations)
-    CUDA.@sync begin
-        @cuda flux_kernel!(flux_values, u, i, equations)
     end
 end
 
@@ -240,10 +208,62 @@ function calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
     end
 end # likely can fallback to pointcloudsolver
 
+function boundary_condition_cuda(du::U, u::U, boundary_normal::AbstractVector,
+                                 boundary_coordinates::BC_coord, t::T,
+                                 surface_flux_function::FluxZero,
+                                 equations::Equation) where {U, BC_coord, T, Equation}
+    return boundary_condition(du,
+                              u,
+                              boundary_normal,
+                              boundary_coordinates,
+                              t,
+                              surface_flux_function, equations)
+end
+function boundary_condition_kernel!(du, u, boundary_idxs,
+                                    boundary_normals, pd, t,
+                                    surface_flux_function,
+                                    equations)
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+    # @cuprintln("thread $index, block $stride, size $(size(u)[1])")
+
+    # for e in index:stride:size(u)[1]
+    #     u_view = @view u[e, :]
+    #     flux_values[e, :] .= flux_cuda(u_view, i, equations)
+    # end
+
+    # for i in eachindex(boundary_idxs)
+    #     boundary_idx = boundary_idxs[i]
+    #     boundary_normal = boundary_normals[i]
+    #     boundary_coordinates = pd.points[boundary_idx]
+    #     u_boundary = u[boundary_idx]
+    #     du[boundary_idx], u[boundary_idx] = boundary_condition_cuda(du[boundary_idx],
+    #                                                                 u[boundary_idx],
+    #                                                                 boundary_normal,
+    #                                                                 boundary_coordinates,
+    #                                                                 t,
+    #                                                                 FluxZero(),
+    #                                                                 equations)
+    # end
+
+    for e in index:stride:length(boundary_idxs)
+        boundary_idx = boundary_idxs[e]
+        boundary_normal = boundary_normals[e]
+        boundary_coordinates = pd.points[boundary_idx]
+        u_boundary = u[boundary_idx]
+        du[boundary_idx], u[boundary_idx] .= boundary_condition_cuda(du[boundary_idx],
+                                                                     u[boundary_idx],
+                                                                     boundary_normal,
+                                                                     boundary_coordinates,
+                                                                     t,
+                                                                     surface_flux_function,
+                                                                     equations)
+    end
+end
 function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
                                     domain,
                                     have_nonconservative_terms::False, equations,
-                                    solver::CUDAPointCloudSolver{NDIMS}) where {NDIMS}
+                                    solver::PointCloudSolver{NDIMS, CUDAExecutionSpace}) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
     @unpack u_face_values, flux_face_values, local_values_threaded = cache
@@ -261,23 +281,20 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
     # Modified to strongly impose BCs
     # Requires mutating u and setting du
     # to 0 at boundary locations
-    for i in eachindex(boundary_idxs)
-        boundary_idx = boundary_idxs[i]
-        boundary_normal = boundary_normals[i]
-        boundary_coordinates = pd.points[boundary_idx]
-        u_boundary = u[boundary_idx]
-        du[boundary_idx], u[boundary_idx] = boundary_condition(du[boundary_idx],
-                                                               u[boundary_idx],
-                                                               boundary_normal,
-                                                               boundary_coordinates,
-                                                               t,
-                                                               FluxZero(), equations)
-    end
+    threads = 256
+    numblocks = ceil(Int, length(boundary_idxs) / threads)
+    @cuda threads=threads blocks=numblocks boundary_condition_kernel!(du, u,
+                                                                      boundary_idxs,
+                                                                      boundary_normals,
+                                                                      pd, t,
+                                                                      FluxZero(),
+                                                                      equations)
 end
 
 # Multiple calc_sources! to resolve method ambiguities
 function calc_sources!(du, u, t, source_terms::Nothing,
-                       domain, equations, solver::CUDAPointCloudSolver, cache)
+                       domain, equations, solver::CUDAPointCloudSolver,
+                       cache)
     nothing
 end
 
@@ -285,7 +302,8 @@ end
 # requiring operator application. Each source will
 # be a callable struct containing its own caches
 function calc_sources!(du, u, t, source_terms,
-                       domain, equations, solver::CUDAPointCloudSolver, cache)
+                       domain, equations, solver::CUDAPointCloudSolver,
+                       cache)
 
     # CHANGE TO CUDAPointCloudSolver compat
     ### NOTE: May actually require direct changes to each source term
@@ -299,7 +317,8 @@ end
 
 function Trixi.rhs!(du, u, t, domain, equations,
                     initial_condition, boundary_conditions::BC, source_terms::Source,
-                    solver::CUDAPointCloudSolver, cache) where {BC, Source}
+                    solver::CUDAPointCloudSolver,
+                    cache) where {BC, Source}
     @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, solver, cache)
 
     # Require two passes for strongly imposed BCs

@@ -96,6 +96,11 @@ function PointCloudSolver(basis::RefPointData, execution_space::Space;
     RBFSolver{RefPointData, typeof(engine), Space}(basis, engine)
 end
 
+function PointCloudSolver(basis::RefPointData; execution_space = CPUExecutionSpace(),
+                          engine = RBFFDEngine())
+    RBFSolver{RefPointData, typeof(engine), typeof(execution_space)}(basis, engine)
+end
+
 """
     PointCloudBasis(element_type, polydeg; approximation_type = RBF(), kwargs...)
 
