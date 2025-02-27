@@ -12,8 +12,7 @@ const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine, Space} = RBFSolver{<
                                                                                Engine,
                                                                                Space} where {
                                                                                              Engine,
-                                                                                             Space <:
-                                                                                             ExecutionSpace
+                                                                                             Space
                                                                                              }
 
 # `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
@@ -93,12 +92,13 @@ end
 
 function PointCloudSolver(basis::RefPointData, execution_space::Space;
                           engine = RBFFDEngine()) where {Space <: ExecutionSpace}
-    RBFSolver{RefPointData, typeof(engine), Space}(basis, engine)
+    RBFSolver{RefPointData, typeof(engine), Space}(basis, engine, execution_space)
 end
 
 function PointCloudSolver(basis::RefPointData; execution_space = CPUExecutionSpace(),
                           engine = RBFFDEngine())
-    RBFSolver{RefPointData, typeof(engine), typeof(execution_space)}(basis, engine)
+    RBFSolver{RefPointData, typeof(engine), typeof(execution_space)}(basis, engine,
+                                                                     execution_space)
 end
 
 """
