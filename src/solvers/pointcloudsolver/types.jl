@@ -71,34 +71,34 @@ function PointCloudSolver(; polydeg = nothing,
                           element_type::AbstractElemShape,
                           approximation_type = RBF(),
                           engine = RBFFDEngine(),
-                          execution_space,
+                          execution_space = CPUExecutionSpace(),
                           kwargs...)
 
     # call dispatchable constructor
-    PointCloudSolver(element_type, approximation_type, engine,
-                     polydeg = polydeg, execution_space, kwargs...)
+    PointCloudSolver(element_type, approximation_type, engine, execution_space,
+                     polydeg = polydeg, kwargs...)
 end
 
 # dispatchable constructor for PointCloudSolver to allow for specialization
 function PointCloudSolver(element_type::AbstractElemShape,
                           approximation_type,
                           engine,
-                          polydeg::Integer,
                           execution_space,
+                          polydeg::Integer,
                           kwargs...)
     rd = RefPointData(element_type, approximation_type, polydeg; kwargs...)
-    return RBFSolver(rd, engine)
+    return RBFSolver(rd, engine, execution_space)
 end
 
-function PointCloudSolver(basis::RefPointData, execution_space::Space;
-                          engine = RBFFDEngine()) where {Space <: ExecutionSpace}
-    RBFSolver{RefPointData, typeof(engine), Space}(basis, engine, execution_space)
-end
+# function PointCloudSolver(basis::RefPointData, execution_space::Space;
+#                           engine = RBFFDEngine()) where {Space <: ExecutionSpace}
+#     RBFSolver{RefPointData, typeof(engine), Space}(basis, engine, execution_space)
+# end
 
-function PointCloudSolver(basis::RefPointData; execution_space = CPUExecutionSpace(),
-                          engine = RBFFDEngine())
-    RBFSolver{RefPointData, typeof(engine), typeof(execution_space)}(basis, engine,
-                                                                     execution_space)
+function PointCloudSolver(basis::RefPointData; engine = RBFFDEngine(),
+                          execution_space = CPUExecutionSpace())
+    RBFSolver(basis, engine,
+              execution_space)
 end
 
 """
