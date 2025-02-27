@@ -11,6 +11,9 @@ const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine, Space} = RBFSolver{<
                                                                                               ApproxType},
                                                                                Engine,
                                                                                Space} where {
+                                                                                             NDIMS,
+                                                                                             ElemType,
+                                                                                             ApproxType,
                                                                                              Engine,
                                                                                              Space <:
                                                                                              ExecutionSpace
