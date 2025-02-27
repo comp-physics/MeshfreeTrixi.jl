@@ -48,9 +48,10 @@ create_cache(mesh, equations, ::RBFFDEngine, solver, uEltype) = NamedTuple()
 
 Create an RBF-FD method.
 """
-struct RBFSolver{Basis, RBFEngine, Space <: ExecutionSpace}
+struct RBFSolver{Basis, RBFEngine, Space}
     basis::Basis
     engine::RBFEngine
+    space::Space
 end
 
 function Base.show(io::IO,
