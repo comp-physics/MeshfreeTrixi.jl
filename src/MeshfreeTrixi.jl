@@ -86,6 +86,7 @@ import Trixi: rhs!, ode_norm
 # # as long as HDF5.jl uses Requires.jl to enable parallel HDF5 with MPI
 using MPI: MPI
 using CUDA
+using CUDA.CUSPARSE
 using SciMLBase: CallbackSet, DiscreteCallback,
                  ODEProblem, ODESolution, ODEFunction,
                  SplitODEProblem

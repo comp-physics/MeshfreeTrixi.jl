@@ -6,3 +6,19 @@
 abstract type ExecutionSpace end
 struct CPUExecutionSpace <: ExecutionSpace end
 struct CUDAExecutionSpace <: ExecutionSpace end
+
+function wrap_array_exec_space(array::ArrayType, space::CPUExecutionSpace) where {ArrayType}
+    return array
+end
+
+function wrap_array_exec_space(array::Vector, space::CUDAExecutionSpace)
+    return CuArray(array)
+end
+
+function wrap_array_exec_space(array::Matrix, space::CUDAExecutionSpace)
+    return CuArray(array)
+end
+
+function wrap_array_exec_space(array::SparseMatrixCSC, space::CUDAExecutionSpace)
+    return CuSparseMatrixCSC(array)
+end

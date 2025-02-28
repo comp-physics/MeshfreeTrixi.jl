@@ -26,13 +26,14 @@ end
 Construct a hyperviscosity source for an RBF-FD discretization.
 """
 function SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
-    cache = (; create_flyer_hv_cache(solver, equations, domain, k, c)...)
+    cache = (; create_flyer_hv_cache(solver, equations, domain, k, c, solver.space)...)
 
     SourceHyperviscosityFlyer{typeof(cache)}(cache)
 end
 
 function create_flyer_hv_cache(solver::PointCloudSolver, equations,
-                               domain::PointCloudDomain, k::Int, c::Real)
+                               domain::PointCloudDomain, k::Int, c::Real,
+                               space::Space) where {Space}
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -41,7 +42,8 @@ function create_flyer_hv_cache(solver::PointCloudSolver, equations,
     # hv_differentiation_matrices operator
     # k is order of Laplacian, actual div order is 2k
     hv_differentiation_matrices = compute_flux_operator(solver, domain, 2 * k)
-    hv_differentiation_matrix = sum(hv_differentiation_matrices)
+    hv_differentiation_matrix = wrap_array_exec_space(sum(hv_differentiation_matrices),
+                                                      space)
 
     # Scale hv by gamma 
     gamma = c * domain.pd.dx_min^(2 * k)
@@ -93,13 +95,14 @@ Construct a hyperviscosity source for an RBF-FD discretization.
 Designed for k=2
 """
 function SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
-    cache = (; create_tominec_hv_cache(solver, equations, domain, c)...)
+    cache = (; create_tominec_hv_cache(solver, equations, domain, c, solver.space)...)
 
     SourceHyperviscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_hv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real)
+                                 domain::PointCloudDomain, c::Real,
+                                 space::Space) where {Space}
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -110,7 +113,7 @@ function create_tominec_hv_cache(solver::PointCloudSolver, equations,
     initial_differentiation_matrices = compute_flux_operator(solver, domain, 2)
     lap = sum(initial_differentiation_matrices)
     # dxx_dyy = initial_differentiation_matrices[1] + initial_differentiation_matrices[2]
-    hv_differentiation_matrix = lap' * lap
+    hv_differentiation_matrix = wrap_array_exec_space(lap' * lap, space)
 
     # Scale hv by gamma 
     gamma = c * domain.pd.dx_min^(4.5)
@@ -161,7 +164,9 @@ Designed for k=2
 """
 function SourceUpwindViscosityTominec(solver, equations, domain; c = 1.0, c_uw = 1.0,
                                       polydeg = 4)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c, c_uw, polydeg)...)
+    cache = (;
+             create_tominec_rv_cache(solver, equations, domain, c, c_uw, polydeg,
+                                     solver.space)...)
 
     SourceUpwindViscosityTominec{typeof(cache)}(cache)
 end
@@ -194,14 +199,16 @@ Designed for k=2
 """
 function SourceResidualViscosityTominec(solver, equations, domain; c_rv = 1.0, c_uw = 1.0,
                                         polydeg = 4)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c_rv, c_uw, polydeg)...)
+    cache = (;
+             create_tominec_rv_cache(solver, equations, domain, c_rv, c_uw, polydeg,
+                                     solver.space)...)
 
     SourceResidualViscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_rv_cache(solver::PointCloudSolver, equations,
                                  domain::PointCloudDomain, c_rv::Real, c_uw::Real,
-                                 polydeg::Int)
+                                 polydeg::Int, space::Space) where {Space}
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -215,9 +222,9 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     # Containers for eps_uw and eps_rv
     nvars = nvariables(equations)
     uEltype = real(solver)
-    eps_uw = zeros(uEltype, pd.num_points)
-    eps_rv = zeros(uEltype, pd.num_points)
-    eps = zeros(uEltype, pd.num_points)
+    eps_uw = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
+    eps_rv = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
+    eps = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
     eps_c = zeros(Int, pd.num_points) # 0 for eps_rv or 1 for eps_uw
     residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     approx_du = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
@@ -232,17 +239,18 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     # Order of residual approximation has to match the 
     # the approximation order of the spatial discretization
     # Ref: Tominec (2023) Section 3.1
-    time_history = zeros(uEltype, polydeg + 1)
-    time_weights = zeros(uEltype, polydeg + 1)
+    time_history = wrap_array_exec_space(zeros(uEltype, polydeg + 1), space)
+    time_weights = wrap_array_exec_space(zeros(uEltype, polydeg + 1), space)
     sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
                                         solver)
-    success_iter = [0]
+    success_iter = wrap_array_exec_space([0], space)
 
     return (; eps_uw, eps_rv, eps, eps_c, c_rv, c_uw, residual, approx_du, time_history,
             time_weights,
             sol_history, success_iter)
 end
 
+### Create Kernel Version Below
 function update_upwind_visc!(eps_uw, u,
                              equations::CompressibleEulerEquations2D, domain, cache)
     gamma = equations.gamma

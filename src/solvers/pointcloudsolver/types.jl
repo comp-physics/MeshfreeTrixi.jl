@@ -213,7 +213,7 @@ function Base.show(io::IO, mime::MIME"text/plain",
             show(increment_indent(io), mime, solver.engine)
         end
         summary_line(io, "execution space",
-                     Space)
+                     solver.space)
         summary_footer(io)
     end
 end

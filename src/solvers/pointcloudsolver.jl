@@ -5,3 +5,4 @@ include("pointcloudsolver/rbfsolver.jl")
 include("pointcloudsolver/parallel_rbfsolver.jl")
 
 # Specialized CUDA version
+include("pointcloudsolver/cuda_solver.jl")

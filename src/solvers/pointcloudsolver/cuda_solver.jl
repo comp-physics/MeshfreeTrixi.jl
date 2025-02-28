@@ -13,28 +13,29 @@
 
 # ALL METHODS FOR MUL NEED TO BE CONVERTED TO CUDAPointCloudSolver
 # out .<- A .* x
-mul_by!(A::AbstractVector) = @inline (out, x) -> out .= A .* x
+# Should all work via CUDA -> LinearAlgebra and SparseArrays extensions
+# mul_by!(A::AbstractVector) = @inline (out, x) -> out .= A .* x
 
-# out <- A*x
-mul_by!(A) = @inline (out, x) -> mul!(out, A, x)
-mul_by!(A::AbstractSparseMatrix) = @inline (out, x) -> mul!(out, A, x)
-function mul_by!(A::LinearAlgebra.AdjOrTrans{T, S}) where {T, S <: AbstractSparseMatrix}
-    @inline (out, x) -> mul!(out, A, x)
-end
+# # out <- A*x
+# mul_by!(A) = @inline (out, x) -> mul!(out, A, x)
+# mul_by!(A::AbstractSparseMatrix) = @inline (out, x) -> mul!(out, A, x)
+# function mul_by!(A::LinearAlgebra.AdjOrTrans{T, S}) where {T, S <: AbstractSparseMatrix}
+#     @inline (out, x) -> mul!(out, A, x)
+# end
 
-#  out <- out + α * A * x
-mul_by_accum!(A, α) = @inline (out, x) -> mul!(out, A, x, α, One())
-function mul_by_accum!(A::AbstractSparseMatrix, α)
-    @inline (out, x) -> mul!(out, A, x, α, One())
-end
+# #  out <- out + α * A * x
+# mul_by_accum!(A, α) = @inline (out, x) -> mul!(out, A, x, α, One())
+# function mul_by_accum!(A::AbstractSparseMatrix, α)
+#     @inline (out, x) -> mul!(out, A, x, α, One())
+# end
 
-# out <- out + A * x
-mul_by_accum!(A) = mul_by_accum!(A, One())
+# # out <- out + A * x
+# mul_by_accum!(A) = mul_by_accum!(A, One())
 
 # StructArray fallback
 ### How to implement fallback for CuSparseMatrixCSC * CuArray
 ### since we are removing StructArrays
-@inline function apply_to_each_field(f::F, args::Vararg{Any, N}) where {F, N}
+@inline function apply_to_each_field(f::F, args::Vararg{Any, N}) where {F, N <: CuArray}
     f(args...)
 end
 
@@ -66,9 +67,10 @@ end
 # end ### fallback to methods for pointcloudsolver
 
 # Allocate nested array type for CUDAPointCloudSolver solution storage.
-function allocate_nested_array(uEltype, nvars, array_dimensions, solver)
+function allocate_nested_array(uEltype, nvars, array_dimensions,
+                               solver::CUDAPointCloudSolver)
     # store components as columns in matrix
-    return CuArray(zeros(uEltype, array_dimensions..., nvars))
+    return CuArray(zeros(Float64, array_dimensions..., nvars))
 end
 
 function reset_du!(du, solver::CUDAPointCloudSolver, other_args...)
