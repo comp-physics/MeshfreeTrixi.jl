@@ -8,10 +8,6 @@
 
 abstract type AbstractRBFEngine end
 
-abstract type ExecutionSpace end
-struct CPUExecutionSpace <: ExecutionSpace end
-struct CUDAExecutionSpace <: ExecutionSpace end
-
 function get_element_variables!(element_variables, u, mesh, equations,
                                 engine::AbstractRBFEngine, solver, cache)
     nothing

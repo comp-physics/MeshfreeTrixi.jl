@@ -44,10 +44,25 @@ end
 # Main function for instantiating all the necessary data for a SerialPointCloudDomain
 function SerialPointCloudDomain(basis::RefPointData{NDIMS},
                                 filename::String,
-                                boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
+                                boundary_names_dict::Dict{Symbol, Int},
+                                space::Space) where {NDIMS, Space <: ExecutionSpace}
     medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
     pd = PointData(medusa_data, basis)
     boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
+                         for (name, idx) in boundary_names_dict)
+    return SerialPointCloudDomain(pd,
+                                  boundary_tags, false)
+end
+
+## In case we want to specialize to CUDA
+function SerialPointCloudDomain(basis::RefPointData{NDIMS},
+                                filename::String,
+                                boundary_names_dict::Dict{Symbol, Int},
+                                space::CUDAExecutionSpace) where {NDIMS}
+    medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
+    pd = PointData(medusa_data, basis)
+    boundary_tags = Dict(name => BoundaryData(CuArray(boundary_idxs[idx]),
+                                              CuArray(boundary_normals[idx]))
                          for (name, idx) in boundary_names_dict)
     return SerialPointCloudDomain(pd,
                                   boundary_tags, false)

@@ -118,7 +118,8 @@ end
 # Main function for instantiating all the necessary data for a ParallelPointCloudDomain
 function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
                                   filename::String,
-                                  boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
+                                  boundary_names_dict::Dict{Symbol, Int},
+                                  space::Space) where {NDIMS, Space <: ExecutionSpace}
     # medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
 
     # Pre-allocate MPI cache. Currently rank 0 loads all data and 
@@ -152,6 +153,57 @@ function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
         append!(boundary_normals[i], boundary_normals_halo[i])
     end
     boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
+                         for (name, idx) in boundary_names_dict)
+    return ParallelPointCloudDomain(pd,
+                                    boundary_tags, mpi_cache, false)
+
+    # return ParallelPointCloudDomain{NDIMS, PointData{NDIMS, Tv, Ti},
+    #                                 Dict{Symbol, BoundaryData{Ti, Tv}}}(pd, boundary_tags,
+    #                                                                     mpi, false)
+end
+
+## In case we want to specialize to CUDA
+function ParallelPointCloudDomain(basis::RefPointData{NDIMS},
+                                  filename::String,
+                                  boundary_names_dict::Dict{Symbol, Int},
+                                  space::CUDAExecutionSpace) where {NDIMS}
+    # medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
+
+    # Pre-allocate MPI cache. Currently rank 0 loads all data and 
+    # distributes to other ranks.
+    # Pre-process everything then set up our local MPI cache
+    # followed by the rest of the data structure.
+    num_procs = mpi_nranks()
+    local_points, local_to_global_idx,
+    halo_points, halo_global, halo_proc, halo_global_to_local_idx,
+    boundary_global, boundary_normals_local, boundary_local_idxs,
+    boundary_halo_global, boundary_normals_halo, boundary_halo_idxs,
+    send_id, recv_id, send_idx, recv_length, dx_min, dx_avg, num_global_points = preprocess(filename,
+                                                                                            2 *
+                                                                                            basis.nv,
+                                                                                            num_procs)
+
+    num_local_points = length(local_points)
+    num_halo_points = length(halo_points)
+
+    ### Convert to CuArrays after preprocess
+    ### May need to pass execution space to MPICache as well
+    ### Just so everything can get wrapped accordingly
+    mpi_cache = MPICache(real(basis), send_id, recv_id, send_idx, recv_length,
+                         num_local_points, num_global_points)
+
+    points = vcat(local_points, halo_points)
+    pd = PointData(points, basis, dx_min, dx_avg)
+
+    # Combine boundary data
+    boundary_idxs = deepcopy(boundary_local_idxs)
+    boundary_normals = deepcopy(boundary_normals_local)
+    for i in eachindex(boundary_idxs)
+        append!(boundary_idxs[i], boundary_halo_idxs[i])
+        append!(boundary_normals[i], boundary_normals_halo[i])
+    end
+    boundary_tags = Dict(name => BoundaryData(CuArray(boundary_idxs[idx]),
+                                              CuArray(boundary_normals[idx]))
                          for (name, idx) in boundary_names_dict)
     return ParallelPointCloudDomain(pd,
                                     boundary_tags, mpi_cache, false)

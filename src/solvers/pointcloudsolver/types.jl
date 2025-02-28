@@ -118,32 +118,39 @@ end
 ########################################
 
 # now that `PointCloudSolver` is defined, we can define constructors for `PointCloudDomain` which use `solver::PointCloudSolver`
-
-function PointCloudDomain(solver::PointCloudSolver, points::Vector{Tv},
+### Do we specialize this by using PointCloudSolver{NDIMS, ElemType, ApproxType, Engine, Space}
+### Space parameter to specialize calls to PointCloudDomain
+### Would require defining ExecutionSpace early like src/auxiliary
+### and adding ExecutionSpace through src/domains/POointCloudDomain 
+function PointCloudDomain(solver::PointCloudSolver{NDIMS, _, _, _, Space},
+                          points::Vector{Tv},
                           neighbors::Vector{Vector{Ti}},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
                                                                                     N,
                                                                                     Tv <:
                                                                                     SVector{N,
                                                                                             Float64},
-                                                                                    Ti
+                                                                                    Ti,
+                                                                                    Space
                                                                                     }
     return PointCloudDomain{NDIMS, typeof(points), typeof(neighbors),
                             typeof(boundary_tags)}(points, neighbors, boundary_tags)
 end
 
-function PointCloudDomain(solver::PointCloudSolver, pd::PointData{NDIMS},
+function PointCloudDomain(solver::PointCloudSolver{NDIMS, _, _, _, Space},
+                          pd::PointData{NDIMS},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
                                                                                     NDIMS,
                                                                                     Tv <:
                                                                                     SVector{NDIMS,
                                                                                             Float64},
-                                                                                    Ti
+                                                                                    Ti,
+                                                                                    Space
                                                                                     }
     return PointCloudDomain(pd, boundary_tags)
 end
 
-# Main function for creating PointCloudDomain
+### Main function for creating PointCloudDomain
 # We directly read in instead of generating
 """
     PointCloudDomain(solver::PointCloudSolver, filename::String)
@@ -169,7 +176,7 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS},
     #                         boundary_tags)
 
     return PointCloudDomain(solver.basis, filename,
-                            boundary_names_dict)
+                            boundary_names_dict, solver.space)
 end
 
 # No checks for these meshes yet available

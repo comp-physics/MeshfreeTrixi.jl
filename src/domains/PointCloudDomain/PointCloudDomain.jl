@@ -22,17 +22,18 @@ include("ParallelPointCloud.jl")
 # Primary constructor for MPI-aware PointCloudDomain
 function PointCloudDomain(basis::RefPointData{NDIMS},
                           filename::String,
-                          boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
+                          boundary_names_dict::Dict{Symbol, Int},
+                          space::Space) where {NDIMS, Space}
 
     # TODO: MPI, create nice interface for a parallel tree/mesh
     if mpi_isparallel()
         # TreeType = ParallelTree{NDIMS}
         return ParallelPointCloudDomain(basis, filename,
-                                        boundary_names_dict)
+                                        boundary_names_dict, space)
     else
         # TreeType = SerialTree{NDIMS}
         return SerialPointCloudDomain(basis, filename,
-                                      boundary_names_dict)
+                                      boundary_names_dict, space)
     end
 
     # Create mesh
