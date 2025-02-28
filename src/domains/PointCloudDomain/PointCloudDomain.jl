@@ -141,15 +141,20 @@ function Base.show(io::IO, ::MIME"text/plain",
         num_normals = length(boundary_data.normals)
         if num_normals > num_normals_to_show_start + num_normals_to_show_end
             # Show the first few normals
-            for i in 1:num_normals_to_show_start
-                summary_line(increment_indent(io), "Normal $i",
-                             "$(boundary_data.normals[i])")
-            end
-            summary_line(increment_indent(io), "Normal ...", "...")
-            # Show the last few normals
-            for i in (num_normals - num_normals_to_show_end + 1):num_normals
-                summary_line(increment_indent(io), "Normal $i",
-                             "$(boundary_data.normals[i])")
+            if boundary_data.idx isa CuArray
+                # Do not print CuArray entries since this
+                # indexes scalar-wise
+            else
+                for i in 1:num_normals_to_show_start
+                    summary_line(increment_indent(io), "Normal $i",
+                                 "$(boundary_data.normals[i])")
+                end
+                summary_line(increment_indent(io), "Normal ...", "...")
+                # Show the last few normals
+                for i in (num_normals - num_normals_to_show_end + 1):num_normals
+                    summary_line(increment_indent(io), "Normal $i",
+                                 "$(boundary_data.normals[i])")
+                end
             end
         else
             # If there aren't many normals, just show all of them

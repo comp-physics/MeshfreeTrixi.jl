@@ -122,8 +122,7 @@ end
 ### Space parameter to specialize calls to PointCloudDomain
 ### Would require defining ExecutionSpace early like src/auxiliary
 ### and adding ExecutionSpace through src/domains/POointCloudDomain 
-function PointCloudDomain(solver::PointCloudSolver{NDIMS, ElemType, ApproxType, Engine,
-                                                   Space},
+function PointCloudDomain(solver::PointCloudSolver,
                           points::Vector{Tv},
                           neighbors::Vector{Vector{Ti}},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
@@ -131,23 +130,20 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS, ElemType, ApproxType, 
                                                                                     Tv <:
                                                                                     SVector{N,
                                                                                             Float64},
-                                                                                    Ti,
-                                                                                    Space
+                                                                                    Ti
                                                                                     }
     return PointCloudDomain{NDIMS, typeof(points), typeof(neighbors),
                             typeof(boundary_tags)}(points, neighbors, boundary_tags)
 end
 
-function PointCloudDomain(solver::PointCloudSolver{NDIMS, ElemType, ApproxType, Engine,
-                                                   Space},
+function PointCloudDomain(solver::PointCloudSolver,
                           pd::PointData{NDIMS},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
                                                                                     NDIMS,
                                                                                     Tv <:
                                                                                     SVector{NDIMS,
                                                                                             Float64},
-                                                                                    Ti,
-                                                                                    Space
+                                                                                    Ti
                                                                                     }
     return PointCloudDomain(pd, boundary_tags)
 end

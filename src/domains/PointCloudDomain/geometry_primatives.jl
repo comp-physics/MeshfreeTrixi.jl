@@ -359,6 +359,6 @@ function PointData(medusa_data::Vector{Tv},
 end
 
 struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
-    idx::Vector{Ti}       # Indices of boundary points
-    normals::Vector{Tv}   # Normals at boundary points
+    idx::Union{Vector{Ti}, CuArray{Ti}}       # Indices of boundary points
+    normals::Union{Vector{Tv}, CuArray{Tv}}   # Normals at boundary points
 end
