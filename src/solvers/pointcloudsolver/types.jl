@@ -122,7 +122,8 @@ end
 ### Space parameter to specialize calls to PointCloudDomain
 ### Would require defining ExecutionSpace early like src/auxiliary
 ### and adding ExecutionSpace through src/domains/POointCloudDomain 
-function PointCloudDomain(solver::PointCloudSolver{NDIMS, _, _, _, Space},
+function PointCloudDomain(solver::PointCloudSolver{NDIMS, ElemType, ApproxType, Engine,
+                                                   Space},
                           points::Vector{Tv},
                           neighbors::Vector{Vector{Ti}},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
@@ -137,7 +138,8 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS, _, _, _, Space},
                             typeof(boundary_tags)}(points, neighbors, boundary_tags)
 end
 
-function PointCloudDomain(solver::PointCloudSolver{NDIMS, _, _, _, Space},
+function PointCloudDomain(solver::PointCloudSolver{NDIMS, ElemType, ApproxType, Engine,
+                                                   Space},
                           pd::PointData{NDIMS},
                           boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
                                                                                     NDIMS,
