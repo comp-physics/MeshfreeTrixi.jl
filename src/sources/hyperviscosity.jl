@@ -252,7 +252,8 @@ end
 
 ### Create Kernel Version Below
 function update_upwind_visc!(eps_uw, u,
-                             equations::CompressibleEulerEquations2D, domain, cache)
+                             equations::CompressibleEulerEquations2D, domain, cache,
+                             space::CPUExecutionSpace)
     gamma = equations.gamma
     # set_to_zero!(eps_uw)
     eps_uw .= 0.0
@@ -291,12 +292,103 @@ function update_upwind_visc!(eps_uw, u,
         eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
 end
+function upwind_visc_kernel!()
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+
+    for idx in index:stride:length(eps_uw)
+        # Convert from conservative to primitive variables
+        rho, v1, v2, p = cons2prim(u[idx], equations)
+
+        # Compute local speed (magnitude of velocity) and sound speed
+        speed = sqrt(v1^2 + v2^2)
+        # sound_speed = NaNMath.sqrt(gamma * p / rho)
+        # Work around for positivity-preserving of p and rho
+        # TODO: Proper way is likely to use stage limiter
+        # if p < 0.0
+        #     p = 0.0
+        # end
+        # if rho < 0.0
+        #     rho = 0.0
+        # end
+        if p < 0.0 || rho < 0.0
+            p = 0.0
+            rho = 0.0
+            sound_speed = 0
+        else
+            sound_speed = sqrt(gamma * p / rho)
+        end
+        # sound_speed = sqrt(gamma * p / rho)
+
+        # h_loc is minimum pairwise distance between points in a patch centered
+        # around x_i where patch consists of 5 points closest to x_i
+        # instead we just take the distance from x_i to the nearest neighbor
+        # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        h_loc = domain.pd.dx_avg
+
+        # Calculate upwind viscosity for the current point
+        eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
+    end
+end
+function update_upwind_visc!(eps_uw, u,
+                             equations::CompressibleEulerEquations2D, domain, cache,
+                             space::CUDAExecutionSpace)
+    gamma = equations.gamma
+    # set_to_zero!(eps_uw)
+    eps_uw .= 0.0
+
+    threads = 256
+    numblocks = ceil(Int, length(eps_uw) / threads)
+
+    @cuda threads=threads blocks=numblocks upwind_visc_kernel!()
+end
 
 # Need to specialize this for serial and MPI cases
 # MPI requires global residuals
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
-                               semi_cache)
+                               semi_cache, space::CPUExecutionSpace)
+    @unpack residual, approx_du, c_rv = cache
+    @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
+    local_u = local_values_threaded[1]
+    local_rhs = rhs_local_threaded[1]
+    set_to_zero!(local_u)
+    set_to_zero!(local_rhs)
+
+    gamma = equations.gamma
+    # set_to_zero!(eps_rv)
+    eps_rv .= 0.0
+
+    @. residual = approx_du - du
+    StructArrays.foreachfield(col -> col .= abs.(col), residual)
+    mean_u = ode_mean(u)
+    recursivecopy!(local_u, u)
+    for i in eachindex(local_u)
+        local_u[i] = abs.(local_u[i] .- mean_u)
+    end
+    n_inf_norms = ode_maximum(local_u)
+    n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
+    rho_n, m1_n, m2_n, e_n = n_inf_norms
+
+    for idx in eachindex(eps_rv)
+        rho_res, m1_res, m2_res, e_res = residual[idx]
+
+        # Max residual deviation
+        max_res = max(rho_res / rho_n, m1_res / m1_n, m2_res / m2_n, e_res / e_n)
+
+        # h_loc is minimum pairwise distance between points in a patch centered
+        # around x_i where patch consists of 5 points closest to x_i
+        # instead we just take the distance from x_i to the nearest neighbor
+        # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+        h_loc = domain.pd.dx_avg
+
+        # Calculate upwind viscosity for the current point
+        eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
+    end
+end
+function update_residual_visc!(eps_rv, du, u,
+                               equations::CompressibleEulerEquations2D, domain, cache,
+                               semi_cache, space::CUDAExecutionSpace)
     @unpack residual, approx_du, c_rv = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
     local_u = local_values_threaded[1]
@@ -336,7 +428,26 @@ function update_residual_visc!(eps_rv, du, u,
     end
 end
 
-function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter)
+function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter, space::CPUExecutionSpace)
+    for i in eachindex(eps)
+        if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
+            if isnan(eps_uw[i]) || isinf(eps_uw[i])
+                # println("eps():", Base.eps())
+                eps[i] = Base.eps()
+                eps_c[i] = 2.0
+            else
+                eps[i] = eps_uw[i]
+                eps_c[i] = 1.0
+            end
+        else
+            eps[i] = min(eps_rv[i], eps_uw[i])
+            eps_c[i] = eps_rv[i] < eps_uw[i] ? 0.0 : 1.0
+        end
+    end
+
+    return nothing
+end
+function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter, space::CUDAExecutionSpace)
     for i in eachindex(eps)
         if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
             if isnan(eps_uw[i]) || isinf(eps_uw[i])
@@ -364,7 +475,38 @@ function (source::SourceUpwindViscosityTominec)(du, u, t, domain, equations,
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
 
     # Update eps
-    update_upwind_visc!(eps_uw, u, equations, domain, source.cache)
+    update_upwind_visc!(eps_uw, u, equations, domain, source.cache, solver.space)
+    eps .= eps_uw
+    eps_c .= 1.0
+    # update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache)
+    # update_visc!(eps, eps_c, eps_uw, eps_rv, source.cache.success_iter[1])
+
+    # Compute the hyperviscous dissipation
+    # We need to apply P ⋅ u = Dx' diag(eps) Dx u + Dy' diag(eps) Dy u + ...
+    # Handle one dim at a time, then accumulate into du
+    local_u = local_values_threaded[1]
+    local_rhs = rhs_local_threaded[1]
+    set_to_zero!(local_u)
+    set_to_zero!(local_rhs)
+    for j in eachdim(domain)
+        apply_to_each_field(mul_by!(rbf_differentiation_matrices[j]),
+                            local_u, u)
+        apply_to_each_field(mul_by!(eps), local_u, local_u)
+        apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j]', -1),
+                            du, local_u)
+    end
+    # du .+= local_rhs
+end
+
+function (source::SourceUpwindViscosityTominec)(du, u, t, domain, equations,
+                                                solver::CUDAPointCloudSolver, semi_cache)
+    basis = solver.basis
+    pd = domain.pd
+    @unpack eps_uw, eps_rv, eps, eps_c, residual, approx_du = source.cache
+    @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
+
+    # Update eps
+    update_upwind_visc!(eps_uw, u, equations, domain, source.cache, solver.space)
     eps .= eps_uw
     eps_c .= 1.0
     # update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache)
@@ -395,9 +537,10 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
 
     # Update eps
-    update_upwind_visc!(eps_uw, u, equations, domain, source.cache)
-    update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache)
-    update_visc!(eps, eps_c, eps_uw, eps_rv, source.cache.success_iter[1])
+    update_upwind_visc!(eps_uw, u, equations, domain, source.cache, solver.space)
+    update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache,
+                          solver.space)
+    update_visc!(eps, eps_c, eps_uw, eps_rv, source.cache.success_iter[1], solver.space)
 
     # Compute the hyperviscous dissipation
     # We need to apply P ⋅ u = Dx' diag(eps) Dx u + Dy' diag(eps) Dy u + ...
