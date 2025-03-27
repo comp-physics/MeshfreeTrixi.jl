@@ -148,6 +148,10 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     end
 end
 
+function cons2prim_cuda(u::U,
+                        equations::CompressibleEulerEquations2D) where {U}
+    return cons2prim(u, equations)
+end
 function flux_cuda(u::U, orientation::Integer,
                    equations::CompressibleEulerEquations2D) where {U}
     return flux(u, orientation, equations)

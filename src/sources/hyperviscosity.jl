@@ -292,13 +292,17 @@ function update_upwind_visc!(eps_uw, u,
         eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
 end
-function upwind_visc_kernel!()
+function upwind_visc_kernel!(eps_uw::F, u::U,
+                             equations::CompressibleEulerEquations2D, gamma::G, dx_avg::D,
+                             c_uw::C,
+                             space::CUDAExecutionSpace) where {F, U, G, D, C}
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
 
     for idx in index:stride:length(eps_uw)
         # Convert from conservative to primitive variables
-        rho, v1, v2, p = cons2prim(u[idx], equations)
+        u_idx = @view u[idx, :]
+        rho, v1, v2, p = cons2prim_cuda(u_idx, equations)
 
         # Compute local speed (magnitude of velocity) and sound speed
         speed = sqrt(v1^2 + v2^2)
@@ -311,23 +315,23 @@ function upwind_visc_kernel!()
         # if rho < 0.0
         #     rho = 0.0
         # end
-        if p < 0.0 || rho < 0.0
-            p = 0.0
-            rho = 0.0
-            sound_speed = 0
-        else
-            sound_speed = sqrt(gamma * p / rho)
-        end
-        # sound_speed = sqrt(gamma * p / rho)
+        # if p < 0.0 || rho < 0.0
+        #     p = 0.0
+        #     rho = 0.0
+        #     sound_speed = 0
+        # else
+        #     sound_speed = sqrt(gamma * p / rho)
+        # end
+        sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
         # instead we just take the distance from x_i to the nearest neighbor
         # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
-        h_loc = domain.pd.dx_avg
+        # h_loc = dx_avg
 
         # Calculate upwind viscosity for the current point
-        eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
+        eps_uw[idx] = c_uw * 0.5 * dx_avg * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
 end
 function update_upwind_visc!(eps_uw, u,
@@ -340,7 +344,11 @@ function update_upwind_visc!(eps_uw, u,
     threads = 256
     numblocks = ceil(Int, length(eps_uw) / threads)
 
-    @cuda threads=threads blocks=numblocks upwind_visc_kernel!()
+    @cuda threads=threads blocks=numblocks upwind_visc_kernel!(eps_uw, u,
+                                                               equations, gamma,
+                                                               domain.pd.dx_avg,
+                                                               cache.c_uw,
+                                                               space)
 end
 
 # Need to specialize this for serial and MPI cases
