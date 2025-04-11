@@ -292,6 +292,23 @@ function update_upwind_visc!(eps_uw, u,
         eps_uw[idx] = cache.c_uw * 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
 end
+
+function update_upwind_visc!(eps_uw, u,
+                             equations::CompressibleEulerEquations2D, domain, cache,
+                             space::CUDAExecutionSpace)
+    gamma = equations.gamma
+    # set_to_zero!(eps_uw)
+    eps_uw .= 0.0
+
+    threads = 256
+    numblocks = ceil(Int, length(eps_uw) / threads)
+
+    @cuda threads=threads blocks=numblocks upwind_visc_kernel!(eps_uw, u,
+                                                               equations, gamma,
+                                                               domain.pd.dx_avg,
+                                                               cache.c_uw,
+                                                               space)
+end
 function upwind_visc_kernel!(eps_uw::F, u::U,
                              equations::CompressibleEulerEquations2D, gamma::G, dx_avg::D,
                              c_uw::C,
@@ -333,22 +350,6 @@ function upwind_visc_kernel!(eps_uw::F, u::U,
         # Calculate upwind viscosity for the current point
         eps_uw[idx] = c_uw * 0.5 * dx_avg * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
     end
-end
-function update_upwind_visc!(eps_uw, u,
-                             equations::CompressibleEulerEquations2D, domain, cache,
-                             space::CUDAExecutionSpace)
-    gamma = equations.gamma
-    # set_to_zero!(eps_uw)
-    eps_uw .= 0.0
-
-    threads = 256
-    numblocks = ceil(Int, length(eps_uw) / threads)
-
-    @cuda threads=threads blocks=numblocks upwind_visc_kernel!(eps_uw, u,
-                                                               equations, gamma,
-                                                               domain.pd.dx_avg,
-                                                               cache.c_uw,
-                                                               space)
 end
 
 # Need to specialize this for serial and MPI cases
@@ -394,6 +395,7 @@ function update_residual_visc!(eps_rv, du, u,
         eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
     end
 end
+
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache, space::CUDAExecutionSpace)
@@ -401,35 +403,57 @@ function update_residual_visc!(eps_rv, du, u,
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
     local_u = local_values_threaded[1]
     local_rhs = rhs_local_threaded[1]
-    set_to_zero!(local_u)
-    set_to_zero!(local_rhs)
+    # set_to_zero!(local_u)
+    # set_to_zero!(local_rhs)
+    local_u .= 0.0
+    local_rhs .= 0.0
 
     gamma = equations.gamma
     # set_to_zero!(eps_rv)
     eps_rv .= 0.0
 
-    @. residual = approx_du - du
-    StructArrays.foreachfield(col -> col .= abs.(col), residual)
+    residual .= abs.(approx_du .- du)
+
     mean_u = ode_mean(u)
     recursivecopy!(local_u, u)
-    for i in eachindex(local_u)
-        local_u[i] = abs.(local_u[i] .- mean_u)
-    end
+    # for i in eachindex(local_u)
+    #     local_u[i] = abs.(local_u[i] .- mean_u)
+    # end
+    local_u = abs.(local_u .- mean_u)
     n_inf_norms = ode_maximum(local_u)
-    n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
-    rho_n, m1_n, m2_n, e_n = n_inf_norms
+    # n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
+    # rho_n, m1_n, m2_n, e_n = n_inf_norms
 
-    for idx in eachindex(eps_rv)
-        rho_res, m1_res, m2_res, e_res = residual[idx]
+    threads = 256
+    numblocks = ceil(Int, length(eps_rv) / threads)
+
+    @cuda threads=threads blocks=numblocks residual_visc_kernel!(eps_rv, residual,
+                                                                 equations, n_inf_norms,
+                                                                 domain.pd.dx_avg,
+                                                                 c_rv,
+                                                                 space)
+end
+function residual_visc_kernel!(eps_rv::F, residual::U,
+                               equations::CompressibleEulerEquations2D, n_inf_norms::N,
+                               dx_avg::D,
+                               c_rv::C,
+                               space::CUDAExecutionSpace) where {F, U, N, D, C}
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+
+    for idx in index:stride:length(eps_rv)
+        # rho_res, m1_res, m2_res, e_res = residual[idx]
+        # rho_n, m1_n, m2_n, e_n = n_inf_norms
+        scaled_res = residual[idx] ./ n_inf_norms
 
         # Max residual deviation
-        max_res = max(rho_res / rho_n, m1_res / m1_n, m2_res / m2_n, e_res / e_n)
+        max_res = maximum(scaled_res)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
         # instead we just take the distance from x_i to the nearest neighbor
         # h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
-        h_loc = domain.pd.dx_avg
+        h_loc = dx_avg
 
         # Calculate upwind viscosity for the current point
         eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
@@ -456,7 +480,19 @@ function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter, space::CPUExecut
     return nothing
 end
 function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter, space::CUDAExecutionSpace)
-    for i in eachindex(eps)
+    threads = 256
+    numblocks = ceil(Int, length(eps) / threads)
+
+    @cuda threads=threads blocks=numblocks update_visc_kernel!(eps, eps_c, eps_uw, eps_rv,
+                                                               success_iter)
+
+    return nothing
+end
+function update_visc_kernel!(eps, eps_c, eps_uw, eps_rv, success_iter)
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+
+    for i in index:stride:length(eps)
         if isnan(eps_rv[i]) || isinf(eps_rv[i]) || success_iter == 0
             if isnan(eps_uw[i]) || isinf(eps_uw[i])
                 # println("eps():", Base.eps())
@@ -471,7 +507,6 @@ function update_visc!(eps, eps_c, eps_uw, eps_rv, success_iter, space::CUDAExecu
             eps_c[i] = eps_rv[i] < eps_uw[i] ? 0.0 : 1.0
         end
     end
-
     return nothing
 end
 

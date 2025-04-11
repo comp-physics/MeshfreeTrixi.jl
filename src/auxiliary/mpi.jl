@@ -80,6 +80,19 @@ function ode_maximum(u::StructArray)
     end
 end
 
+# More fixes needed for MPI
+function ode_maximum(u::CuArray)
+    local_max = maximum(u, dims = 1)
+    vec_size = length(local_max)
+    # local_max = Vector(local_max)
+    if mpi_isparallel()
+        global_max = MPI.Allreduce(local_max, MPI.MAX, mpi_comm())
+        return global_max
+    else
+        return maximum(u, dims = 1)
+    end
+end
+
 """
     ode_minimum(u)
 
@@ -106,6 +119,18 @@ function ode_minimum(u::StructArray)
         return SVector{vec_size, Float64}(global_min)
     else
         return SVector{vec_size, Float64}(local_min)
+    end
+end
+
+function ode_minimum(u::CuArray)
+    local_min = minimum(u, dims = 1)
+    vec_size = length(local_min)
+    # local_min = Vector(local_min)
+    if mpi_isparallel()
+        global_min = MPI.Allreduce(local_min, MPI.MIN, mpi_comm())
+        return global_min
+    else
+        return minimum(u, dims = 1)
     end
 end
 
