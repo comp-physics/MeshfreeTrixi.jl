@@ -75,21 +75,21 @@ end
 end
 
 function update_history!(semi, u, t, approx_order, integrator)
-    @unpack source_terms = semi
+    @unpack source_terms, solver = semi
 
     # If source includes time history cache, update
     # otherwise no-op
     for source in values(source_terms)
-        modify_cache!(source, u, t, approx_order, integrator)
+        modify_cache!(source, u, t, approx_order, integrator, solver.space)
     end
 end
 
-function modify_cache!(source::T, u, t, approx_order, integrator) where {T}
+function modify_cache!(source::T, u, t, approx_order, integrator, space) where {T}
     # Fallback method that does nothing
 end
 
 function modify_cache!(source::SourceResidualViscosityTominec, u, t, approx_order,
-                       integrator)
+                       integrator, space)
     # May need access to integrator to get count of timesteps 
     # since first few iterations can only support lower order
     @unpack time_history, sol_history, approx_du, time_weights = source.cache
@@ -97,28 +97,36 @@ function modify_cache!(source::SourceResidualViscosityTominec, u, t, approx_orde
 
     source.cache.success_iter .= integrator.success_iter
 
-    shift_soln_history!(time_history, sol_history, t, u)
+    shift_soln_history!(time_history, sol_history, t, u, space)
     update_approx_du!(approx_du, time_weights, time_history, sol_history, success_iter,
-                      approx_order)
+                      approx_order, space)
 end
 
-function shift_soln_history!(time_history, sol_history, t, u)
+function shift_soln_history!(time_history, sol_history, t, u, space::CPUExecutionSpace)
     # Assuming sol_history[:, 1] is the most recent and sol_history[:, end] is the oldest
     time_history[2:end] .= time_history[1:(end - 1)]
     time_history[1] = t
     sol_history[:, 2:end] .= sol_history[:, 1:(end - 1)]
     sol_history[:, 1] .= u
 end
+function shift_soln_history!(time_history, sol_history, t, u, space::CUDAExecutionSpace)
+    # Assuming sol_history[:, 1] is the most recent and sol_history[:, end] is the oldest
+    time_history[2:end] .= time_history[1:(end - 1)]
+    time_history[1] = t
+    sol_history[:, :, 2:end] .= sol_history[:, :, 1:(end - 1)]
+    sol_history[:, :, 1] .= u
+end
 
 function update_approx_du!(approx_du, time_weights, time_history, sol_history,
-                           success_iter, approx_order)
+                           success_iter, approx_order, space::CPUExecutionSpace)
     set_to_zero!(approx_du)
 
     num_time_points = min(success_iter + 1, approx_order + 1)
     if success_iter > 0
         # Update the time weights for the current number of time points
         time_deriv_weights!(@view(time_weights[1:num_time_points]),
-                            @view(time_history[1:num_time_points]))
+                            @view(time_history[1:num_time_points]),
+                            space)
 
         for i in 1:num_time_points
             approx_du .+= time_weights[i] .* sol_history[:, i]
@@ -127,8 +135,27 @@ function update_approx_du!(approx_du, time_weights, time_history, sol_history,
 
     return nothing
 end
+function update_approx_du!(approx_du, time_weights, time_history, sol_history,
+                           success_iter, approx_order, space::CUDAExecutionSpace)
+    # set_to_zero!(approx_du)
+    approx_du .= 0
 
-function time_deriv_weights!(w, t)
+    num_time_points = min(success_iter + 1, approx_order + 1)
+    if success_iter > 0
+        # Update the time weights for the current number of time points
+        time_deriv_weights!(@view(time_weights[1:num_time_points]),
+                            @view(time_history[1:num_time_points]),
+                            space)
+
+        for i in 1:num_time_points
+            approx_du .+= time_weights[i] .* sol_history[:, :, i]
+        end
+    end
+
+    return nothing
+end
+
+function time_deriv_weights!(w, t, space::CPUExecutionSpace)
     #Input: a vector t, where t(i) is time at which the solution is available.
     # Output: a vector w, where each w(i) is used to multiply u|_{t(i)} in order
     # ... to get a derivative at t(end).
@@ -141,6 +168,28 @@ function time_deriv_weights!(w, t)
     # Construct the polynomial basis, and differentiate it in a point t_eval.
     A = zeros(size(t_, 1), size(t_, 1))
     b_t = zeros(1, size(t_, 1))
+    for k in 1:length(t)
+        A[:, k] = t_ .^ (k - 1)
+        b_t[k] = (k - 1) * t_eval .^ (k - 2)
+    end
+    # w .= scale .* (b_t / A)
+    w .= scale .* (A' \ b_t')
+
+    return nothing
+end
+function time_deriv_weights!(w, t, space::CUDAExecutionSpace)
+    #Input: a vector t, where t(i) is time at which the solution is available.
+    # Output: a vector w, where each w(i) is used to multiply u|_{t(i)} in order
+    # ... to get a derivative at t(end).
+    # Usage: d/dt u(t_end) = w(end)*u(end) + w(end-1)*u(end-1) + ... + w(1)*u(1),
+    # ... where t_end is the time at which the last solution point is available.
+    # From Tominec
+    scale = 1 / maximum(abs.(t))
+    t_ = t .* scale
+    t_eval = t_[1] # The derivative should be evaluated at t(end).
+    # Construct the polynomial basis, and differentiate it in a point t_eval.
+    A = CUDA.zeros(size(t_, 1), size(t_, 1))
+    b_t = CUDA.zeros(1, size(t_, 1))
     for k in 1:length(t)
         A[:, k] = t_ .^ (k - 1)
         b_t[k] = (k - 1) * t_eval .^ (k - 2)
