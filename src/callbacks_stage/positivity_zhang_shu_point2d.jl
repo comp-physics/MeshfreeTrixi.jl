@@ -6,14 +6,26 @@
 @muladd begin
 #! format: noindent
 
+# @inline function update_mean(u_mean, u_next,
+#                              equations::CompressibleEulerEquations2D)
+#     # u_mean[element] += u[i]
+#     rho_m, rho_v1_m, rho_v2_m, rho_e_m = u_mean
+#     rho, rho_v1, rho_v2, rho_e = u_next
+#     rho_m += rho
+#     rho_v1_m += rho_v1
+#     rho_v2_m += rho_v2
+#     rho_e_m += rho_e
+#     return SVector(rho_m, rho_v1_m, rho_v2_m, rho_e_m)
+# end
+
 """
     PositivityPreservingLimiterZhangShu(; threshold, variables)
 
 The fully-discrete positivity-preserving limiter of
 - Zhang, Shu (2011)
-  Maximum-principle-satisfying and positivity-preserving high-order schemes
-  for conservation laws: survey and new developments
-  [doi: 10.1098/rspa.2011.0153](https://doi.org/10.1098/rspa.2011.0153)
+    Maximum-principle-satisfying and positivity-preserving high-order schemes
+    for conservation laws: survey and new developments
+    [doi: 10.1098/rspa.2011.0153](https://doi.org/10.1098/rspa.2011.0153)
 The limiter is applied to all scalar `variables` in their given order
 using the associated `thresholds` to determine the minimal acceptable values.
 The order of the `variables` is important and might have a strong influence
@@ -33,45 +45,27 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
     for element in eachindex(u)
         # determine minimum value
         value_min = typemax(eltype(u[element]))
-        # u_node = u[domain.pd.neighbors[element]]
-        # value_min = min(value_min, minimum(u_node))
-        # variable(u[element], equations)
-        for i in domain.pd.neighbors[element]
-            value_min = min(value_min, variable(u[i], equations))
-        end
-        # for j in eachnode(solver), i in eachnode(solver)
-        #     u_node = get_node_vars(u, equations, solver, i, j, element)
-        #     value_min = min(value_min, variable(u_node, equations))
+        # for i in domain.pd.neighbors[element][1:min(7, end)]
+        #     value_min = min(value_min, variable(u[i], equations))
         # end
+        value_min = min(value_min, variable(u[element], equations))
 
         # detect if limiting is necessary
         value_min < threshold || continue
 
         # compute mean value
-        # u_mean = SVector(zeros(eltype(u[element]), nvariables(equations))...)
-        for i in domain.pd.neighbors[element]
-            u_mean[element] += u[i]
-        end
-        u_mean[element] = u_mean[element] / domain.pd.num_neighbors
-        # for j in eachnode(solver), i in eachnode(solver)
-        #     u_node = get_node_vars(u, equations, solver, i, j, element)
-        #     u_mean += u_node * weights[i] * weights[j]
-        # end
-        # note that the reference element is [-1,1]^ndims(solver), thus the weights sum to 2
-        # u_mean = u_mean / 2^ndims(domain)
+        update_mean(u_mean[element], u, element,
+                    equations::CompressibleEulerEquations2D, domain)
 
         # We compute the value directly with the mean values, as we assume that
         # Jensen's inequality holds (e.g. pressure for compressible Euler equations).
         value_mean = variable(u_mean[element], equations)
         theta = (value_mean - threshold) / (value_mean - value_min)
-        local_u[element] = theta * u[element] + (1 - theta) * u_mean[element]
-        # for j in eachnode(solver), i in eachnode(solver)
-        #     u_node = get_node_vars(u, equations, solver, i, j, element)
-        #     set_node_vars!(u, theta * u_node + (1 - theta) * u_mean,
-        #                    equations, solver, i, j, element)
-        # end
+        # local_u[element] = theta * u[element] + (1 - theta) * u_mean[element]
+        apply_limiter!(local_u[element], u[element], u_mean[element], theta)
     end
 
+    # Apply limited values
     for element in eachindex(u)
         if local_u[element] != zero_el
             u[element] = local_u[element]
@@ -79,5 +73,36 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
     end
 
     return nothing
+end
+@inline function update_mean(u_mean, u, element,
+                             equations::CompressibleEulerEquations2D, domain)
+    rho_m, rho_v1_m, rho_v2_m, rho_e_m = u_mean
+    neighbors_included = min(7, domain.pd.num_neighbors)
+    for i in domain.pd.neighbors[element][1:neighbors_included]
+        rho, rho_v1, rho_v2, rho_e = u[i]
+        rho_m += rho
+        rho_v1_m += rho_v1
+        rho_v2_m += rho_v2
+        rho_e_m += rho_e
+    end
+    # u_mean[element] = u_mean[element] / domain.pd.num_neighbors
+    rho_m = rho_m / neighbors_included
+    rho_v1_m = rho_v1_m / neighbors_included
+    rho_v2_m = rho_v2_m / neighbors_included
+    rho_e_m = rho_e_m / neighbors_included
+    return SVector(rho_m, rho_v1_m, rho_v2_m, rho_e_m)
+end
+@inline function apply_limiter!(local_u, u, u_mean, theta)
+    # local_u[element] = theta * u[element] + (1 - theta) * u_mean[element]
+    rho, rho_v1, rho_v2, rho_e = u
+    rho_m, rho_v1_m, rho_v2_m, rho_e_m = u_mean
+    rho_l, rho_v1_l, rho_v2_l, rho_e_l = local_u
+
+    rho_l = theta * rho + (1 - theta) * rho_m
+    rho_v1_l = theta * rho_v1 + (1 - theta) * rho_v1_m
+    rho_v2_l = theta * rho_v2 + (1 - theta) * rho_v2_m
+    rho_e_l = theta * rho_e + (1 - theta) * rho_e_m
+
+    return SVector(rho_l, rho_v1_l, rho_v2_l, rho_e_l)
 end
 end # @muladd
