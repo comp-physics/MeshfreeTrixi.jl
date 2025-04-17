@@ -57,7 +57,7 @@ function cons2prim_kernel!(u_prim::U, u::U,
 
     for idx in index:stride:size(u)[1]
         # Convert from conservative to primitive variables
-        u_prim[idx, :] = cons2prim_cuda(u[idx, :], equations)
+        u_prim[idx, :] .= cons2prim_cuda(@view(u[idx, :]), equations)
     end
 end
 
@@ -87,7 +87,7 @@ end
 function allocate_nested_array(uEltype, nvars, array_dimensions,
                                solver::CUDAPointCloudSolver)
     # store components as columns in matrix
-    return CuArray(zeros(Float64, array_dimensions..., nvars))
+    return CuArray(zeros(uEltype, array_dimensions..., nvars))
 end
 
 function reset_du!(du, solver::CUDAPointCloudSolver, other_args...)
@@ -106,7 +106,6 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
                             uEltype) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
-    d_points = CuArray(pd.points)
 
     # CHANGE TO CUDAPointCloudSolver compat
 
@@ -137,9 +136,17 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
                                                 (pd.num_points,), solver)
                           for _ in 1:Threads.nthreads()]
 
+    ### CUDA Specific Variables
+    d_points = CuArray(pd.points)
+    d_neighbors = CuArray(hcat(pd.neighbors...))
+    d_u_var_neighbors = allocate_nested_array(uEltype, pd.num_points,
+                                              (pd.num_neighbors,), solver)
+    d_threshold_true = allocate_nested_array(Bool, 1, (pd.num_points,), solver)
+
     return (; pd, rbf_differentiation_matrices,
             u_values, u_face_values, flux_face_values,
-            local_values_threaded, flux_threaded, rhs_local_threaded, d_points)
+            local_values_threaded, flux_threaded, rhs_local_threaded,
+            d_points, d_neighbors, d_u_var_neighbors, d_threshold_true)
 end
 
 # function Trixi.allocate_coefficients(domain::PointCloudDomain, equations,

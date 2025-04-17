@@ -192,6 +192,7 @@ function trixi2vtk(u, t, systems, semi; output_directory = "out", prefix = "",
             foreach_system(systems) do system
                 save_tag = string(nameof(typeof(system)))
                 @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                                  semi.solver.space,
                                                                   write_meta_data = write_meta_data)
 
                 # Extract custom quantities for this system
@@ -221,6 +222,7 @@ function trixi2vtk(u, t, systems, semi; output_directory = "out", prefix = "",
             foreach_system(systems) do system
                 save_tag = string(nameof(typeof(system)))
                 @trixi_timeit timer() "save $save_tag" write2vtk!(vtk, u, t, system, semi,
+                                                                  semi.solver.space,
                                                                   write_meta_data = write_meta_data)
 
                 # Extract custom quantities for this system
@@ -300,7 +302,7 @@ function trixi2vtk(coordinates; output_directory = "out", prefix = "",
 end
 
 ### Instead of system::SysType, use a combination of Eqns and Source Types to dispatch
-function write2vtk!(vtk, u, t, system, semi; write_meta_data)
+function write2vtk!(vtk, u, t, system, semi, space; write_meta_data)
     return vtk
 end
 function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi,
@@ -325,47 +327,51 @@ function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi,
                     space::CUDAExecutionSpace;
                     write_meta_data = true)
     # Export conservative variables
-    vtk["density"] = get_component(u, 1)
-    vtk["density_energy"] = get_component(u, 4)
-    vtk["momentum"] = vcat(get_component(u, 2)', get_component(u, 3)')
+    vtk["density"] = wrap_array_cpu(get_component(u, 1))
+    vtk["density_energy"] = wrap_array_cpu(get_component(u, 4))
+    vtk["momentum"] = vcat(wrap_array_cpu(get_component(u, 2)'),
+                           wrap_array_cpu(get_component(u, 3)'))
 
     # Post-process primitive variables
     u_prim = semi.cache.local_values_threaded[1]
+    # u_prim = 0.0
     # for i in eachindex(u_prim)
     # u_prim[i] = cons2prim(u[i], system)
     # end
     threads = 256
     numblocks = ceil(Int, size(u)[1] / threads)
-    @cuda threads=threads blocks=numblocks cons2prim_kernel!(u_prim, u, equations)
-    vtk["pressure"] = get_component(u_prim, 4)
-    vtk["velocity"] = vcat(get_component(u_prim, 2)', get_component(u_prim, 3)')
+    # @device_code_warntype interactive=true 
+    @cuda threads=threads blocks=numblocks cons2prim_kernel!(u_prim, u, semi.equations)
+    vtk["pressure"] = wrap_array_cpu(get_component(u_prim, 4))
+    vtk["velocity"] = vcat(wrap_array_cpu(get_component(u_prim, 2)'),
+                           wrap_array_cpu(get_component(u_prim, 3)'))
 
     return vtk
 end
 
 function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi, space;
                     write_meta_data = true)
-    vtk["eps"] = system.cache.eps
-    vtk["eps_scalar"] = system.cache.eps_c
+    vtk["eps"] = wrap_array_cpu(system.cache.eps)
+    vtk["eps_scalar"] = wrap_array_cpu(system.cache.eps_c)
 
     return vtk
 end
 
 function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi, space;
                     write_meta_data = true)
-    vtk["eps"] = system.cache.eps
-    vtk["eps_scalar"] = system.cache.eps_c
-    vtk["eps_uw"] = system.cache.eps_uw
-    vtk["eps_rv"] = system.cache.eps_rv
-    vtk["approx_du"] = system.cache.approx_du
-    vtk["residual"] = system.cache.residual
+    vtk["eps"] = wrap_array_cpu(system.cache.eps)
+    vtk["eps_scalar"] = wrap_array_cpu(system.cache.eps_c)
+    vtk["eps_uw"] = wrap_array_cpu(system.cache.eps_uw)
+    vtk["eps_rv"] = wrap_array_cpu(system.cache.eps_rv)
+    vtk["approx_du"] = wrap_array_cpu(system.cache.approx_du)
+    vtk["residual"] = wrap_array_cpu(system.cache.residual)
 
     return vtk
 end
 
 function write2vtk!(vtk, u, t, system::SourceIGR, semi, space;
                     write_meta_data = true)
-    vtk["sigma"] = system.cache.sigma
+    vtk["sigma"] = wrap_array_cpu(system.cache.sigma)
 
     return vtk
 end

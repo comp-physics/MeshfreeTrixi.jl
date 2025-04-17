@@ -22,3 +22,7 @@ end
 function wrap_array_exec_space(array::SparseMatrixCSC, space::CUDAExecutionSpace)
     return CuSparseMatrixCSC(array)
 end
+
+function wrap_array_cpu(array::ArrayType) where {ArrayType}
+    return Array(array)
+end

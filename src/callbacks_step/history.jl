@@ -149,8 +149,9 @@ function update_approx_du!(approx_du, time_weights, time_history, sol_history,
                             space)
 
         for i in 1:num_time_points
-            approx_du .+= time_weights[i] .* sol_history[:, :, i]
+            approx_du .+= @view(time_weights[i]) .* sol_history[:, :, i]
         end
+        # approx_du .+= time_weights[1:num_time_points] .* sol_history[:, :, 1:num_time_points]
     end
 
     return nothing
@@ -193,14 +194,16 @@ function time_deriv_weights!(w, t, space::CUDAExecutionSpace)
     # From Tominec
     scale = 1 / maximum(abs.(t))
     t_ = t .* scale
-    t_eval = t_[1] # The derivative should be evaluated at t(end).
+    t_eval = @view t_[1] # The derivative should be evaluated at t(end).
     # Construct the polynomial basis, and differentiate it in a point t_eval.
     A = CUDA.zeros(size(t_, 1), size(t_, 1))
     b_t = CUDA.zeros(1, size(t_, 1))
     for k in 1:length(t)
-        A[:, k] = t_ .^ (k - 1)
-        b_t[k] = (k - 1) * t_eval .^ (k - 2)
+        A[:, k] .= t_ .^ (k - 1)
+        # b_t[k] = (k - 1) * t_eval .^ (k - 2)
     end
+    k = 1:length(t)
+    b_t[:] .= (k .- 1) .* t_eval .^ (k .- 2)
     # w .= scale .* (b_t / A)
     w .= scale .* (A' \ b_t')
 
