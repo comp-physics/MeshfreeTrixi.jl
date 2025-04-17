@@ -125,6 +125,7 @@ using IterativeSolvers
 import Base: *
 import LinearAlgebra: mul!
 using RadialBasisFiniteDifferences
+using LinearSolve
 
 # Define the entry points of our type hierarchy, e.g.
 #     AbstractEquations, AbstractSemidiscretization etc.

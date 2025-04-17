@@ -112,7 +112,8 @@ end
 function shift_soln_history!(time_history, sol_history, t, u, space::CUDAExecutionSpace)
     # Assuming sol_history[:, 1] is the most recent and sol_history[:, end] is the oldest
     time_history[2:end] .= time_history[1:(end - 1)]
-    time_history[1] = t
+    time_view = @view time_history[1]
+    time_view .= t
     sol_history[:, :, 2:end] .= sol_history[:, :, 1:(end - 1)]
     sol_history[:, :, 1] .= u
 end
@@ -173,7 +174,13 @@ function time_deriv_weights!(w, t, space::CPUExecutionSpace)
         b_t[k] = (k - 1) * t_eval .^ (k - 2)
     end
     # w .= scale .* (b_t / A)
-    w .= scale .* (A' \ b_t')
+    # w .= scale .* (A' \ b_t')
+    # w .= scale .* (inv(A') * b_t')
+    A_t = Matrix(A')
+    b = vec(b_t)
+    prob = LinearProblem(A_t, b)
+    sol = solve(prob, QRFactorization())
+    w .= sol.u
 
     return nothing
 end

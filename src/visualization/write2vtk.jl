@@ -303,7 +303,8 @@ end
 function write2vtk!(vtk, u, t, system, semi; write_meta_data)
     return vtk
 end
-function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi;
+function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi,
+                    space::CPUExecutionSpace;
                     write_meta_data = true)
     # Export conservative variables
     vtk["density"] = get_component(u, 1)
@@ -320,8 +321,29 @@ function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi;
 
     return vtk
 end
+function write2vtk!(vtk, u, t, system::CompressibleEulerEquations2D, semi,
+                    space::CUDAExecutionSpace;
+                    write_meta_data = true)
+    # Export conservative variables
+    vtk["density"] = get_component(u, 1)
+    vtk["density_energy"] = get_component(u, 4)
+    vtk["momentum"] = vcat(get_component(u, 2)', get_component(u, 3)')
 
-function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi;
+    # Post-process primitive variables
+    u_prim = semi.cache.local_values_threaded[1]
+    # for i in eachindex(u_prim)
+    # u_prim[i] = cons2prim(u[i], system)
+    # end
+    threads = 256
+    numblocks = ceil(Int, size(u)[1] / threads)
+    @cuda threads=threads blocks=numblocks cons2prim_kernel!(u_prim, u, equations)
+    vtk["pressure"] = get_component(u_prim, 4)
+    vtk["velocity"] = vcat(get_component(u_prim, 2)', get_component(u_prim, 3)')
+
+    return vtk
+end
+
+function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi, space;
                     write_meta_data = true)
     vtk["eps"] = system.cache.eps
     vtk["eps_scalar"] = system.cache.eps_c
@@ -329,7 +351,7 @@ function write2vtk!(vtk, u, t, system::SourceUpwindViscosityTominec, semi;
     return vtk
 end
 
-function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
+function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi, space;
                     write_meta_data = true)
     vtk["eps"] = system.cache.eps
     vtk["eps_scalar"] = system.cache.eps_c
@@ -341,7 +363,7 @@ function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi;
     return vtk
 end
 
-function write2vtk!(vtk, u, t, system::SourceIGR, semi;
+function write2vtk!(vtk, u, t, system::SourceIGR, semi, space;
                     write_meta_data = true)
     vtk["sigma"] = system.cache.sigma
 

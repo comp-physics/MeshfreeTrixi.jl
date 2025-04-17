@@ -225,7 +225,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     eps_uw = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
     eps_rv = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
     eps = wrap_array_exec_space(zeros(uEltype, pd.num_points), space)
-    eps_c = zeros(Int, pd.num_points) # 0 for eps_rv or 1 for eps_uw
+    eps_c = wrap_array_exec_space(zeros(Int, pd.num_points), space) # 0 for eps_rv or 1 for eps_uw
     residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     approx_du = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_uw = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
@@ -400,13 +400,16 @@ function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache, space::CUDAExecutionSpace)
     @unpack residual, approx_du, c_rv = cache
-    @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
+    @unpack u_values, local_values_threaded, rhs_local_threaded, flux_face_values = semi_cache
+    # Unpack scratch space
     local_u = local_values_threaded[1]
     local_rhs = rhs_local_threaded[1]
     # set_to_zero!(local_u)
     # set_to_zero!(local_rhs)
     local_u .= 0.0
     local_rhs .= 0.0
+    max_res = @view flux_face_values[:, 1]
+    max_res .= 0.0
 
     gamma = equations.gamma
     # set_to_zero!(eps_rv)
@@ -424,30 +427,38 @@ function update_residual_visc!(eps_rv, du, u,
     # n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
     # rho_n, m1_n, m2_n, e_n = n_inf_norms
 
+    ### Mapreduce only available for CuArray no CuDeviceArray
+    # so array manipulations are required outside kernel
+    scaled_res = local_rhs
+    scaled_res .= residual ./ n_inf_norms
+    max_res .= maximum(scaled_res, dims = 2)
+
     threads = 256
     numblocks = ceil(Int, length(eps_rv) / threads)
 
-    @cuda threads=threads blocks=numblocks residual_visc_kernel!(eps_rv, residual,
+    # @device_code_warntype interactive=true 
+    @cuda threads=threads blocks=numblocks residual_visc_kernel!(eps_rv, max_res,
                                                                  equations, n_inf_norms,
                                                                  domain.pd.dx_avg,
                                                                  c_rv,
                                                                  space)
 end
-function residual_visc_kernel!(eps_rv::F, residual::U,
-                               equations::CompressibleEulerEquations2D, n_inf_norms::N,
+function residual_visc_kernel!(eps_rv::F, max_res::CuDeviceArray,
+                               equations::CompressibleEulerEquations2D,
+                               n_inf_norms::CuDeviceArray,
                                dx_avg::D,
                                c_rv::C,
-                               space::CUDAExecutionSpace) where {F, U, N, D, C}
+                               space::CUDAExecutionSpace) where {F, D, C}
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
 
     for idx in index:stride:length(eps_rv)
         # rho_res, m1_res, m2_res, e_res = residual[idx]
         # rho_n, m1_n, m2_n, e_n = n_inf_norms
-        scaled_res = residual[idx] ./ n_inf_norms
+        # scaled_res = residual[idx, :] ./ n_inf_norms[:]
 
         # Max residual deviation
-        max_res = maximum(scaled_res)
+        max_res_local = max_res[idx]
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -456,7 +467,7 @@ function residual_visc_kernel!(eps_rv::F, residual::U,
         h_loc = dx_avg
 
         # Calculate upwind viscosity for the current point
-        eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
+        eps_rv[idx] = 0.5 * c_rv * h_loc^2 * max_res_local  # Assuming h_loc is uniform; adjust as needed
     end
 end
 
@@ -583,7 +594,8 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
     update_upwind_visc!(eps_uw, u, equations, domain, source.cache, solver.space)
     update_residual_visc!(eps_rv, du, u, equations, domain, source.cache, semi_cache,
                           solver.space)
-    update_visc!(eps, eps_c, eps_uw, eps_rv, source.cache.success_iter[1], solver.space)
+    update_visc!(eps, eps_c, eps_uw, eps_rv, @view(source.cache.success_iter[1]),
+                 solver.space)
 
     # Compute the hyperviscous dissipation
     # We need to apply P ⋅ u = Dx' diag(eps) Dx u + Dy' diag(eps) Dy u + ...

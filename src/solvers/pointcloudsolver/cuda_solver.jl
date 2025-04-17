@@ -35,18 +35,30 @@
 # StructArray fallback
 ### How to implement fallback for CuSparseMatrixCSC * CuArray
 ### since we are removing StructArrays
-@inline function apply_to_each_field(f::F, args::Vararg{Any, N}) where {F, N <: CuArray}
+@inline function apply_to_each_field(f::F, args::Vararg{CuArray, N}) where {F, N}
     f(args...)
-end
-
-function cons2prim_cuda(u::U,
-                        equations::CompressibleEulerEquations2D) where {U}
-    return cons2prim(u, equations)
 end
 
 # Convenience Methods for reseting CuArray
 function set_to_zero!(array::CuArray)
     array .= zero(eltype(array)) # Convert to CUDAPointCloudSolver
+end
+
+get_component(u::CuArray, i::Int) = u[:, i]
+
+function cons2prim_cuda(u::U,
+                        equations::CompressibleEulerEquations2D) where {U}
+    return cons2prim(u, equations)
+end
+function cons2prim_kernel!(u_prim::U, u::U,
+                           equations::CompressibleEulerEquations2D) where {U}
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+
+    for idx in index:stride:size(u)[1]
+        # Convert from conservative to primitive variables
+        u_prim[idx, :] = cons2prim_cuda(u[idx, :], equations)
+    end
 end
 
 # # iteration over quantities over the entire domain (dofs, quad nodes, face nodes).
@@ -94,6 +106,7 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
                             uEltype) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
+    d_points = CuArray(pd.points)
 
     # CHANGE TO CUDAPointCloudSolver compat
 
@@ -126,7 +139,7 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
 
     return (; pd, rbf_differentiation_matrices,
             u_values, u_face_values, flux_face_values,
-            local_values_threaded, flux_threaded, rhs_local_threaded)
+            local_values_threaded, flux_threaded, rhs_local_threaded, d_points)
 end
 
 # function Trixi.allocate_coefficients(domain::PointCloudDomain, equations,
@@ -216,58 +229,86 @@ end # likely can fallback to pointcloudsolver
 function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
                                     domain,
                                     have_nonconservative_terms::False, equations,
-                                    solver::PointCloudSolver{NDIMS, CUDAExecutionSpace}) where {NDIMS}
+                                    solver::CUDAPointCloudSolver)
     rd = solver.basis
     pd = domain.pd
-    @unpack u_face_values, flux_face_values, local_values_threaded = cache
+    @unpack u_face_values, flux_face_values, local_values_threaded, d_points = cache
 
     # CHANGE TO CUDAPointCloudSolver compat
     ### MAY NEED TO CONVERT TO KERNEL
 
     boundary_flux = local_values_threaded[1]
+    boundary_values = flux_face_values
     set_to_zero!(boundary_flux)
+    set_to_zero!(boundary_values)
 
     # Extract boundary elements
     boundary_idxs = domain.boundary_tags[boundary_key].idx
     boundary_normals = domain.boundary_tags[boundary_key].normals
+    # Workaround to reorder values for indexing
+    du_boundary = @view du[boundary_idxs, :]
+    u_boundary = @view u[boundary_idxs, :]
+    # points = pd.points
+    points = @view d_points[boundary_idxs] # Workaround to use device point array,
+    # Replace when compute_flux_ops is fully on GPU
 
     # Modified to strongly impose BCs
     # Requires mutating u and setting du
     # to 0 at boundary locations
     threads = 256
     numblocks = ceil(Int, length(boundary_idxs) / threads)
-    @cuda threads=threads blocks=numblocks boundary_condition_kernel!(du, u,
+    # @device_code_warntype interactive=true 
+    @cuda threads=threads blocks=numblocks boundary_condition_kernel!(boundary_condition,
+                                                                      boundary_flux,
+                                                                      boundary_values,
+                                                                      du_boundary,
+                                                                      u_boundary,
                                                                       boundary_idxs,
                                                                       boundary_normals,
-                                                                      pd, t,
+                                                                      points, t,
                                                                       FluxZero(),
                                                                       equations)
 end
-function boundary_condition_kernel!(du, u, boundary_idxs,
-                                    boundary_normals, pd, t,
+function boundary_condition_kernel!(boundary_condition, boundary_flux, boundary_values,
+                                    du, u, boundary_idxs,
+                                    boundary_normals, points, t,
                                     surface_flux_function,
                                     equations)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
 
     for e in index:stride:length(boundary_idxs)
-        boundary_idx = boundary_idxs[e]
+        ### ORIGINAL ORDERING
+        # boundary_idx = boundary_idxs[e]
+        # boundary_normal = boundary_normals[e]
+        # boundary_coordinates = points[boundary_idx]
+        # du_boundary = @view du[boundary_idx, :]
+        # u_boundary = @view u[boundary_idx, :]
+        ### ASSUMES POINTS ALREADY REORDERED
         boundary_normal = boundary_normals[e]
-        boundary_coordinates = pd.points[boundary_idx]
-        u_boundary = u[boundary_idx]
-        du[boundary_idx], u[boundary_idx] .= boundary_condition_cuda(du[boundary_idx],
-                                                                     u[boundary_idx],
-                                                                     boundary_normal,
-                                                                     boundary_coordinates,
-                                                                     t,
-                                                                     surface_flux_function,
-                                                                     equations)
+        boundary_coordinates = points[e]
+        du_boundary = @view du[e, :]
+        u_boundary = @view u[e, :]
+        # boundary_flux_boundary = boundary_flux[boundary_idx, :]
+        # boundary_values_boundary = boundary_values[boundary_idx, :]
+        boundary_condition_cuda(boundary_condition,
+                                du_boundary,
+                                u_boundary,
+                                boundary_normal,
+                                boundary_coordinates,
+                                t,
+                                surface_flux_function,
+                                equations)
+        # du_boundary .= boundary_flux_boundary
+        # u_boundary .= boundary_values_boundary
     end
 end
-function boundary_condition_cuda(du::U, u::U, boundary_normal::AbstractVector,
+function boundary_condition_cuda(boundary_condition::F, du::U, u::U,
+                                 boundary_normal::AbstractVector,
                                  boundary_coordinates::BC_coord, t::T,
-                                 surface_flux_function::FluxZero,
-                                 equations::Equation) where {U, BC_coord, T, Equation}
+                                 surface_flux_function::SF,
+                                 equations::Equation) where {F, U, BC_coord, T, SF,
+                                                             Equation}
     return boundary_condition(du,
                               u,
                               boundary_normal,

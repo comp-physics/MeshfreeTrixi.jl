@@ -45,9 +45,11 @@ function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
     for element in eachindex(u)
         # determine minimum value
         value_min = typemax(eltype(u[element]))
-        # for i in domain.pd.neighbors[element][1:min(7, end)]
-        #     value_min = min(value_min, variable(u[i], equations))
-        # end
+        # neighbors_included = min(7, domain.pd.num_neighbors)
+        neighbors_included = domain.pd.num_neighbors
+        for i in domain.pd.neighbors[element][1:neighbors_included]
+            value_min = min(value_min, variable(u[i], equations))
+        end
         value_min = min(value_min, variable(u[element], equations))
 
         # detect if limiting is necessary
@@ -77,7 +79,8 @@ end
 @inline function update_mean(u_mean, u, element,
                              equations::CompressibleEulerEquations2D, domain)
     rho_m, rho_v1_m, rho_v2_m, rho_e_m = u_mean
-    neighbors_included = min(7, domain.pd.num_neighbors)
+    # neighbors_included = min(7, domain.pd.num_neighbors)
+    neighbors_included = domain.pd.num_neighbors
     for i in domain.pd.neighbors[element][1:neighbors_included]
         rho, rho_v1, rho_v2, rho_e = u[i]
         rho_m += rho
@@ -104,5 +107,76 @@ end
     rho_e_l = theta * rho_e + (1 - theta) * rho_e_m
 
     return SVector(rho_l, rho_v1_l, rho_v2_l, rho_e_l)
+end
+
+function Trixi.limiter_zhang_shu!(u, threshold::Real, variable,
+                                  domain::PointCloudDomain{2}, equations,
+                                  solver::CUDAPointCloudSolver, cache)
+    threads = 256
+    numblocks = ceil(Int, size(u)[1] / threads)
+
+    # @unpack weights = solver.basis
+    local_u = cache.local_values_threaded[1]
+    u_mean = cache.rhs_local_threaded[1]
+    # set_to_zero!(local_u)
+    # set_to_zero!(u_mean)
+    local_u .= 0.0
+    u_mean .= 0.0
+    # zero_el = SVector(zeros(eltype(u[1]), nvariables(equations))...)
+
+    @cuda threads=threads blocks=numblocks limiter_zhang_shu_kernel!(u, local_u, u_mean,
+                                                                     threshold,
+                                                                     equations)
+    @cuda threads=threads blocks=numblocks apply_limiter_zhang_shu_kernel!(u, local_u)
+end
+function limiter_zhang_shu_kernel!(u, local_u, u_mean, threshold, equations)
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+    # @threaded for element in eachelement(solver, cache)
+    for element in index:stride:size(u)[1]
+        # determine minimum value
+        value_min = typemax(eltype(u[element, :]))
+        # for i in domain.pd.neighbors[element][1:min(7, end)]
+        #     value_min = min(value_min, variable(u[i], equations))
+        # end
+        value_min = min(value_min, variable(u[element, :], equations))
+
+        # detect if limiting is necessary
+        value_min < threshold || continue
+
+        # compute mean value
+        update_mean_kernel(u_mean[element, :], u, element,
+                           equations::CompressibleEulerEquations2D, domain)
+
+        # We compute the value directly with the mean values, as we assume that
+        # Jensen's inequality holds (e.g. pressure for compressible Euler equations).
+        value_mean = variable(u_mean[element, :], equations)
+        theta = (value_mean - threshold) / (value_mean - value_min)
+        # local_u[element] = theta * u[element] + (1 - theta) * u_mean[element]
+        apply_limiter_kernel(local_u[element, :], u[element, :], u_mean[element, :],
+                             theta)
+    end
+    return nothing
+end
+function apply_limiter_zhang_shu_kernel!(u, local_u)
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+    # Apply limited values
+    for element in index:stride:size(u)[1]
+        if any(local_u[element, :] .!= 0.0)
+            u[element, :] = local_u[element, :]
+        end
+    end
+    return nothing
+end
+function update_mean_kernel(u_mean::UM, u::U, element::E,
+                            equations::CompressibleEulerEquations2D,
+                            domain::D) where {UM, U, E, D}
+    update_mean(u_mean[element], u, element,
+                equations::CompressibleEulerEquations2D, domain)
+end
+function apply_limiter_kernel(local_u::LU, u::U, u_mean::UM,
+                              theta::T) where {LU, U, UM, T}
+    apply_limiter!(local_u[element], u[element], u_mean[element], theta)
 end
 end # @muladd

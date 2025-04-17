@@ -11,6 +11,10 @@ struct FluxZero end
 function (surface_flux::FluxZero)(u_inner, u_boundary, normal_direction, equations)
     SVector(zeros(length(u_inner))...)
 end
+function (surface_flux::FluxZero)(u_inner, u_boundary, normal_direction,
+                                  equations::CompressibleEulerEquations2D)
+    return SVector(0.0, 0.0, 0.0, 0.0)
+end
 
 @inline function apply_slip_velocity(u, normal_vector,
                                      equations::CompressibleEulerEquations2D)
@@ -53,13 +57,14 @@ julia> BoundaryConditionDirichlet(initial_condition_convergence_test)
                                                                   equations)
     # get the external value of the solution
     u_boundary = boundary_condition.boundary_value_function(x, t, equations)
-    # u_inner = u_boundary
+    u_inner = u_boundary
 
     # Calculate boundary flux
     # Will always return zero vector
     flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
+    du_inner = flux
 
-    return flux, u_boundary
+    return
 end
 
 """
@@ -95,14 +100,17 @@ Should be used together with [`UnstructuredMesh2D`](@ref).
 
     # rotate the internal solution state
     u_local = apply_slip_velocity(u_inner, normal, equations)
+    u_inner = u_local
+
+    du_local = SVector(du_inner[1],
+                       zero(eltype(u_inner)),
+                       zero(eltype(u_inner)),
+                       du_inner[4])
+    du_inner = du_local
 
     # For the slip wall we directly set the flux as the normal velocity is zero
     # Strongly imposed, hardset du to 0
-    return SVector(du_inner[1],
-                   zero(eltype(u_inner)),
-                   zero(eltype(u_inner)),
-                   du_inner[4]),
-           u_local
+    return
 end
 
 struct BoundaryConditionDoNothing end
@@ -110,7 +118,6 @@ struct BoundaryConditionDoNothing end
 @inline function (::BoundaryConditionDoNothing)(du_inner, u_inner,
                                                 outward_direction::AbstractVector,
                                                 x, t, surface_flux::FluxZero, equations)
-    return du_inner,
-           u_inner
+    return
 end
 end # @muladd
