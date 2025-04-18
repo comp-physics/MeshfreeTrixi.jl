@@ -359,7 +359,7 @@ end
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache, space::CPUExecutionSpace)
-    @unpack residual, approx_du, c_rv = cache
+    @unpack residual, approx_du, du_r, c_rv = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
     local_u = local_values_threaded[1]
     local_rhs = rhs_local_threaded[1]

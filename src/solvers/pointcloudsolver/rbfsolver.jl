@@ -308,12 +308,13 @@ function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundar
         boundary_normal = boundary_normals[i]
         boundary_coordinates = pd.points[boundary_idx]
         u_boundary = u[boundary_idx]
-        du[boundary_idx], u[boundary_idx] = boundary_condition(du[boundary_idx],
-                                                               u[boundary_idx],
-                                                               boundary_normal,
-                                                               boundary_coordinates,
-                                                               t,
-                                                               FluxZero(), equations)
+        du_boundary = du[boundary_idx]
+        boundary_condition(du_boundary,
+                           u_boundary,
+                           boundary_normal,
+                           boundary_coordinates,
+                           t,
+                           FluxZero(), equations)
     end
 end
 
