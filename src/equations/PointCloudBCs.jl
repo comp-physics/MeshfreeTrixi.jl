@@ -56,15 +56,15 @@ julia> BoundaryConditionDirichlet(initial_condition_convergence_test)
                                                                   surface_flux_function::FluxZero,
                                                                   equations)
     # get the external value of the solution
-    u_boundary = boundary_condition.boundary_value_function(x, t, equations)
-    u_inner = u_boundary
+    # u_boundary = boundary_condition.boundary_value_function(x, t, equations)
+    u_inner .= boundary_condition.boundary_value_function(x, t, equations)
 
     # Calculate boundary flux
     # Will always return zero vector
-    flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
-    du_inner = flux
+    # flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
+    du_inner .= surface_flux_function(u_inner, u_inner, normal_direction, equations)
 
-    return
+    return nothing
 end
 
 """
@@ -99,18 +99,21 @@ Should be used together with [`UnstructuredMesh2D`](@ref).
     normal = normal_direction / norm_
 
     # rotate the internal solution state
-    u_local = apply_slip_velocity(u_inner, normal, equations)
-    u_inner = u_local
+    # u_local = apply_slip_velocity(u_inner, normal, equations)
+    u_inner .= apply_slip_velocity(u_inner, normal, equations)
 
-    du_local = SVector(du_inner[1],
-                       zero(eltype(u_inner)),
-                       zero(eltype(u_inner)),
-                       du_inner[4])
-    du_inner = du_local
+    # du_local .= SVector(du_inner[1],
+    #                    zero(eltype(u_inner)),
+    #                    zero(eltype(u_inner)),
+    #                    du_inner[4])
+    du_inner .= SVector(du_inner[1],
+                        zero(eltype(u_inner)),
+                        zero(eltype(u_inner)),
+                        du_inner[4])
 
     # For the slip wall we directly set the flux as the normal velocity is zero
     # Strongly imposed, hardset du to 0
-    return
+    return nothing
 end
 
 struct BoundaryConditionDoNothing end
@@ -118,6 +121,6 @@ struct BoundaryConditionDoNothing end
 @inline function (::BoundaryConditionDoNothing)(du_inner, u_inner,
                                                 outward_direction::AbstractVector,
                                                 x, t, surface_flux::FluxZero, equations)
-    return
+    return nothing
 end
 end # @muladd
