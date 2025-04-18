@@ -228,6 +228,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     eps_c = wrap_array_exec_space(zeros(Int, pd.num_points), space) # 0 for eps_rv or 1 for eps_uw
     residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     approx_du = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
+    du_r = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_uw = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_rv = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
@@ -245,7 +246,8 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
                                         solver)
     success_iter = wrap_array_exec_space([0], space)
 
-    return (; eps_uw, eps_rv, eps, eps_c, c_rv, c_uw, residual, approx_du, time_history,
+    return (; eps_uw, eps_rv, eps, eps_c, c_rv, c_uw, residual, approx_du, du_r,
+            time_history,
             time_weights,
             sol_history, success_iter)
 end
@@ -332,14 +334,14 @@ function upwind_visc_kernel!(eps_uw::F, u::U,
         # if rho < 0.0
         #     rho = 0.0
         # end
-        # if p < 0.0 || rho < 0.0
-        #     p = 0.0
-        #     rho = 0.0
-        #     sound_speed = 0
-        # else
-        #     sound_speed = sqrt(gamma * p / rho)
-        # end
-        sound_speed = sqrt(gamma * p / rho)
+        if p < 0.0 || rho < 0.0
+            p = 0.0
+            rho = 0.0
+            sound_speed = 0
+        else
+            sound_speed = sqrt(gamma * p / rho)
+        end
+        # sound_speed = sqrt(gamma * p / rho)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -367,6 +369,7 @@ function update_residual_visc!(eps_rv, du, u,
     gamma = equations.gamma
     # set_to_zero!(eps_rv)
     eps_rv .= 0.0
+    du_r .= du
 
     @. residual = approx_du - du
     StructArrays.foreachfield(col -> col .= abs.(col), residual)
@@ -399,7 +402,7 @@ end
 function update_residual_visc!(eps_rv, du, u,
                                equations::CompressibleEulerEquations2D, domain, cache,
                                semi_cache, space::CUDAExecutionSpace)
-    @unpack residual, approx_du, c_rv = cache
+    @unpack residual, approx_du, du_r, c_rv = cache
     @unpack u_values, local_values_threaded, rhs_local_threaded, flux_face_values = semi_cache
     # Unpack scratch space
     local_u = local_values_threaded[1]
@@ -414,6 +417,7 @@ function update_residual_visc!(eps_rv, du, u,
     gamma = equations.gamma
     # set_to_zero!(eps_rv)
     eps_rv .= 0.0
+    du_r .= du
 
     residual .= abs.(approx_du .- du)
 

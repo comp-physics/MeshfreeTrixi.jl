@@ -205,7 +205,12 @@ function time_deriv_weights!(w, t, space::CUDAExecutionSpace)
     k = 1:length(t)
     b_t[:] .= (k .- 1) .* t_eval .^ (k .- 2)
     # w .= scale .* (b_t / A)
-    w .= scale .* (A' \ b_t')
+    # w .= scale .* (A' \ b_t')
+    A_t = A'
+    b = b_t[:]
+    prob = LinearProblem(A_t, b)
+    sol = solve(prob, QRFactorization())
+    w .= sol.u
 
     return nothing
 end

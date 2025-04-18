@@ -365,6 +365,7 @@ function write2vtk!(vtk, u, t, system::SourceResidualViscosityTominec, semi, spa
     vtk["eps_rv"] = wrap_array_cpu(system.cache.eps_rv)
     vtk["approx_du"] = wrap_array_cpu(system.cache.approx_du)
     vtk["residual"] = wrap_array_cpu(system.cache.residual)
+    vtk["du_r"] = wrap_array_cpu(system.cache.du_r)
 
     return vtk
 end
