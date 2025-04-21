@@ -50,6 +50,24 @@ julia> BoundaryConditionDirichlet(initial_condition_convergence_test)
 # Note: For unstructured we lose the concept of an "absolute direction"
 # Modified for Point Cloud implementation
 # requires strongly imposing boundary conditions
+@inline function (boundary_condition::BoundaryConditionDirichlet)(du_inner::U,
+                                                                  u_inner::U,
+                                                                  normal_direction::AbstractVector,
+                                                                  x, t,
+                                                                  surface_flux_function::FluxZero,
+                                                                  equations) where {U <:
+                                                                                    SVector}
+    # get the external value of the solution
+    # u_boundary = boundary_condition.boundary_value_function(x, t, equations)
+    u_inner = boundary_condition.boundary_value_function(x, t, equations)
+
+    # Calculate boundary flux
+    # Will always return zero vector
+    # flux = surface_flux_function(u_inner, u_boundary, normal_direction, equations)
+    du_inner = surface_flux_function(u_inner, u_inner, normal_direction, equations)
+
+    return du_inner, u_inner
+end
 @inline function (boundary_condition::BoundaryConditionDirichlet)(du_inner, u_inner,
                                                                   normal_direction::AbstractVector,
                                                                   x, t,
@@ -89,6 +107,33 @@ Details about the 1D pressure Riemann solution can be found in Section 6.3.3 of 
 
 Should be used together with [`UnstructuredMesh2D`](@ref).
 """
+@inline function boundary_condition_slip_wall(du_inner::U, u_inner::U,
+                                              normal_direction::AbstractVector,
+                                              x, t,
+                                              surface_flux_function::FluxZero,
+                                              equations::CompressibleEulerEquations2D) where {U <:
+                                                                                              SVector}
+    norm_ = norm(normal_direction)
+    # Normalize the vector without using `normalize` since we need to multiply by the `norm_` later
+    normal = normal_direction / norm_
+
+    # rotate the internal solution state
+    # u_local = apply_slip_velocity(u_inner, normal, equations)
+    u_inner = apply_slip_velocity(u_inner, normal, equations)
+
+    # du_local .= SVector(du_inner[1],
+    #                    zero(eltype(u_inner)),
+    #                    zero(eltype(u_inner)),
+    #                    du_inner[4])
+    du_inner = SVector(du_inner[1],
+                       zero(eltype(u_inner)),
+                       zero(eltype(u_inner)),
+                       du_inner[4])
+
+    # For the slip wall we directly set the flux as the normal velocity is zero
+    # Strongly imposed, hardset du to 0
+    return du_inner, u_inner
+end
 @inline function boundary_condition_slip_wall(du_inner, u_inner,
                                               normal_direction::AbstractVector,
                                               x, t,
@@ -118,6 +163,12 @@ end
 
 struct BoundaryConditionDoNothing end
 
+@inline function (::BoundaryConditionDoNothing)(du_inner::U, u_inner::U,
+                                                outward_direction::AbstractVector,
+                                                x, t, surface_flux::FluxZero,
+                                                equations) where {U <: SVector}
+    return du_inner, u_inner
+end
 @inline function (::BoundaryConditionDoNothing)(du_inner, u_inner,
                                                 outward_direction::AbstractVector,
                                                 x, t, surface_flux::FluxZero, equations)
