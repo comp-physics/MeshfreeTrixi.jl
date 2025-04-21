@@ -43,9 +43,9 @@ const CUDAPointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = PointCloudSolv
 
 # these are necessary for pretty printing
 polydeg(solver::PointCloudSolver) = solver.basis.N
-# function Base.summary(io::IO, solver::RBFSolver) where {RBFSolver <: PointCloudSolver}
-#     print(io, "PointCloudSolver(polydeg=$(polydeg(solver)))")
-# end
+function Base.summary(io::IO, solver::PointCloudSolver)
+    print(io, "PointCloudSolver(polydeg=$(polydeg(solver)))")
+end
 
 # real(rd) is the eltype of the nodes `rd.r`.
 # Base.real(rd::RefPointData) = eltype(rd.r)
@@ -218,8 +218,8 @@ function Base.show(io::IO, mime::MIME"text/plain",
     end
 end
 
-Base.summary(io::IO, solver::PointCloudSolver) = print(io,
-                                                       "PointCloudSolver(" *
-                                                       summary(solver.basis) *
-                                                       ")")
+# Base.summary(io::IO, solver::PointCloudSolver) = print(io,
+#                                                        "PointCloudSolver(" *
+#                                                        summary(solver.basis) *
+#                                                        ")")
 end # @muladd
